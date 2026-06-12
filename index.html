@@ -160,12 +160,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="ctx"></div>
-<div id="build">build 5</div>
+<div id="build">build 6</div>
 
 <script>
 'use strict';
 
-const BUILD = 5;
+const BUILD = 6;
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
 
@@ -223,9 +223,12 @@ function attachLongPress(el, handler) {
 }
 
 // ── Snap ──────────────────────────────────────────
-function snapTo(x) {
+function snapTo(x, excludeId = null) {
   let best = null, d = SNAP_DIST;
-  for (const ev of events) { const dd = Math.abs(ev.x - x); if (dd < d) { d = dd; best = ev.x; } }
+  for (const ev of events) {
+    if (ev.id === excludeId) continue;
+    const dd = Math.abs(ev.x - x); if (dd < d) { d = dd; best = ev.x; }
+  }
   return best; // null if no snap
 }
 
@@ -241,6 +244,43 @@ function renderEvents() {
       showCtx(e.clientX, e.clientY, [{ label: 'イベントを削除', fn: () => deleteEvent(ev.id) }]);
     dot.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); dotMenu(e); });
     attachLongPress(dot, dotMenu);
+
+    // Drag dot left/right to reposition the event
+    dot.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      dot.setPointerCapture(e.pointerId);
+      const sx = e.clientX, ox = ev.x;
+      let moved = false;
+
+      const onMove = ev2 => {
+        const dx = ev2.clientX - sx;
+        if (!moved && Math.abs(dx) < 4) return;
+        moved = true;
+        const rect = tlContent.getBoundingClientRect();
+        const nx = Math.max(0, ox + dx);
+        ev.x = nx;
+        // Move dot, label and timeline drop-line live
+        dot.style.left = `${nx}px`;
+        lw.style.left  = `${nx}px`;
+        dl.style.left  = `${nx}px`;
+        // Move all section drop-lines for this event
+        document.querySelectorAll(`.sec-drop-line[data-ev-id="${ev.id}"]`)
+          .forEach(ln => { ln.style.left = `${nx}px`; });
+      };
+
+      const onUp = () => {
+        dot.removeEventListener('pointermove', onMove);
+        dot.removeEventListener('pointerup',   onUp);
+        dot.removeEventListener('pointercancel', onUp);
+        if (!moved && li) li.focus(); // tap → focus the label input
+      };
+
+      dot.addEventListener('pointermove', onMove);
+      dot.addEventListener('pointerup',   onUp);
+      dot.addEventListener('pointercancel', onUp);
+    });
+
     tlContent.appendChild(dot);
 
     // Label
@@ -264,14 +304,17 @@ function renderEvents() {
 }
 
 // ── Section drop lines ────────────────────────────
+function makeSecLine(ev) {
+  const ln = document.createElement('div');
+  ln.className = 'sec-drop-line';
+  ln.style.left = `${ev.x}px`;
+  ln.dataset.evId = ev.id;
+  return ln;
+}
+
 function refreshSecDropLines(secContent) {
   secContent.querySelectorAll('.sec-drop-line').forEach(el => el.remove());
-  for (const ev of events) {
-    const ln = document.createElement('div');
-    ln.className = 'sec-drop-line';
-    ln.style.left = `${ev.x}px`;
-    secContent.appendChild(ln);
-  }
+  for (const ev of events) secContent.appendChild(makeSecLine(ev));
 }
 
 // ── Render section ────────────────────────────────
@@ -296,12 +339,7 @@ function renderSection(sec) {
   sc.id = `sc-${sec.id}`;
 
   // Drop lines from existing events
-  for (const ev of events) {
-    const ln = document.createElement('div');
-    ln.className = 'sec-drop-line';
-    ln.style.left = `${ev.x}px`;
-    sc.appendChild(ln);
-  }
+  for (const ev of events) sc.appendChild(makeSecLine(ev));
 
   // Existing tasks
   for (const t of sec.tasks) appendTask(sc, sec, t);
@@ -451,11 +489,7 @@ function addEvent(x) {
   // Add drop lines to all sections
   for (const sec of sections) {
     const sc = document.getElementById(`sc-${sec.id}`);
-    if (!sc) continue;
-    const ln = document.createElement('div');
-    ln.className = 'sec-drop-line';
-    ln.style.left = `${ev.x}px`;
-    sc.appendChild(ln);
+    if (sc) sc.appendChild(makeSecLine(ev));
   }
   requestAnimationFrame(() => {
     const inp = document.querySelector(`[data-ev="${ev.id}"]`);
