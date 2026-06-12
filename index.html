@@ -103,6 +103,15 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .task-bar.dragging { cursor: grabbing; opacity: .88; z-index: 50; }
 .task-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 
+/* ── Edge-alignment markers ── */
+.task-mark {
+  position: absolute; top: -15px; font-size: 12px; line-height: 1;
+  color: var(--accent); pointer-events: none; z-index: 20; font-weight: 700;
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+.task-mark-l { left: 0;  transform: translateX(-50%); }
+.task-mark-r { right: 0; transform: translateX(50%); }
+
 .task-text { flex: 1; background: transparent; border: none; outline: none;
   color: var(--text); font-size: 11px; padding: 0 5px; cursor: default;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -161,12 +170,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="ctx"></div>
-<div id="build">build 7</div>
+<div id="build">build 8</div>
 
 <script>
 'use strict';
 
-const BUILD = 7;
+const BUILD = 8;
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
 
@@ -247,6 +256,40 @@ function snapToTaskEdge(x) {
   return best; // null if no snap
 }
 
+// ── Edge-alignment markers ─────────────────────────
+const ALIGN_TOL = 1.5; // px — treat as aligned if within this distance
+
+function updateTaskMarkers(bar, task) {
+  bar.querySelectorAll('.task-mark').forEach(el => el.remove());
+  let hasL = false, hasR = false;
+  for (const ev of events) {
+    if (!hasL && Math.abs(task.x - ev.x) < ALIGN_TOL) {
+      const m = document.createElement('span');
+      m.className = 'task-mark task-mark-l';
+      m.textContent = '↓';
+      bar.appendChild(m);
+      hasL = true;
+    }
+    if (!hasR && Math.abs((task.x + task.w) - ev.x) < ALIGN_TOL) {
+      const m = document.createElement('span');
+      m.className = 'task-mark task-mark-r';
+      m.textContent = '↑';
+      bar.appendChild(m);
+      hasR = true;
+    }
+    if (hasL && hasR) break;
+  }
+}
+
+function updateAllTaskMarkers() {
+  for (const sec of sections) {
+    for (const t of sec.tasks) {
+      const bar = document.getElementById(`task-${t.id}`);
+      if (bar) updateTaskMarkers(bar, t);
+    }
+  }
+}
+
 // ── Render events ─────────────────────────────────
 function renderEvents() {
   tlContent.querySelectorAll('.ev-dot, .ev-label, .ev-drop-line').forEach(el => el.remove());
@@ -286,6 +329,8 @@ function renderEvents() {
         // Move all section drop-lines for this event
         document.querySelectorAll(`.sec-drop-line[data-ev-id="${ev.id}"]`)
           .forEach(ln => { ln.style.left = `${nx}px`; });
+        // Update markers on all tasks (event position changed)
+        updateAllTaskMarkers();
       };
 
       const onUp = () => {
@@ -293,6 +338,7 @@ function renderEvents() {
         dot.removeEventListener('pointerup',   onUp);
         dot.removeEventListener('pointercancel', onUp);
         dot.classList.remove('snapping');
+        updateAllTaskMarkers();
         if (!moved && li) li.focus(); // tap → focus the label input
       };
 
@@ -482,6 +528,7 @@ function setupDrag(bar, sec, task, lh, rh) {
         task.x = nx; task.w = nw;
         bar.style.left = `${nx}px`; bar.style.width = `${nw}px`;
       }
+      updateTaskMarkers(bar, task); // live marker update while dragging
     };
 
     const onUp = ev => {
@@ -491,6 +538,7 @@ function setupDrag(bar, sec, task, lh, rh) {
       bar.removeEventListener('pointerup', onUp);
       bar.removeEventListener('pointercancel', onUp);
       bar.classList.remove('dragging', 'snapping');
+      updateTaskMarkers(bar, task);
       // A press without movement (and no menu) is a tap → edit the text
       if (!started && !menuShown && input) input.focus();
     };
@@ -511,6 +559,7 @@ function addEvent(x) {
     const sc = document.getElementById(`sc-${sec.id}`);
     if (sc) sc.appendChild(makeSecLine(ev));
   }
+  updateAllTaskMarkers();
   requestAnimationFrame(() => {
     const inp = document.querySelector(`[data-ev="${ev.id}"]`);
     if (inp) inp.focus();
@@ -526,6 +575,7 @@ function deleteEvent(id) {
     const sc = document.getElementById(`sc-${sec.id}`);
     if (sc) refreshSecDropLines(sc);
   }
+  updateAllTaskMarkers();
 }
 
 function addSection() {
@@ -554,7 +604,8 @@ function addTask(secId, clickX) {
   sec.tasks.push(task);
   const sc = document.getElementById(`sc-${secId}`);
   if (!sc) return;
-  appendTask(sc, sec, task);
+  const bar = appendTask(sc, sec, task);
+  updateTaskMarkers(bar, task);
   requestAnimationFrame(() => {
     const inp = document.querySelector(`#task-${task.id} input`);
     if (inp) inp.focus();
