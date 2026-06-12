@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>MyPlotLine</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -159,12 +159,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="ctx"></div>
-<div id="build">build 3</div>
+<div id="build">build 4</div>
 
 <script>
 'use strict';
 
-const BUILD = 3;
+const BUILD = 4;
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
 
@@ -305,19 +305,11 @@ function renderSection(sec) {
   // Existing tasks
   for (const t of sec.tasks) appendTask(sc, sec, t);
 
-  // Double-tap / double-click on empty area to add a task there
-  let lastTap = 0, lastX = 0, lastY = 0;
+  // Single tap/click on empty area to add a task there
   sc.addEventListener('pointerup', e => {
     if (e.target !== sc && !e.target.classList.contains('sec-drop-line')) return;
-    const now = Date.now();
-    if (now - lastTap < 350 &&
-        Math.abs(e.clientX - lastX) < 24 && Math.abs(e.clientY - lastY) < 24) {
-      const rect = sc.getBoundingClientRect();
-      addTask(sec.id, e.clientX - rect.left);
-      lastTap = 0;
-    } else {
-      lastTap = now; lastX = e.clientX; lastY = e.clientY;
-    }
+    const rect = sc.getBoundingClientRect();
+    addTask(sec.id, e.clientX - rect.left);
   });
 
   row.appendChild(sc);
