@@ -95,7 +95,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 /* ── Task bar ── */
 .task-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 36px;
   background: var(--task-bg); border: 1.5px solid var(--task-bd); border-radius: 6px;
-  display: flex; align-items: center; cursor: grab; user-select: none; z-index: 10;
+  display: flex; align-items: center; cursor: grab; user-select: none;
+  -webkit-user-select: none; -webkit-touch-callout: none; z-index: 10;
   min-width: 50px; touch-action: none; transition: box-shadow .1s, border-color .1s; }
 .task-bar:hover { box-shadow: 0 2px 10px rgba(56,139,253,.3); }
 .task-bar.dragging { cursor: grabbing; opacity: .88; z-index: 50; }
@@ -159,12 +160,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="ctx"></div>
-<div id="build">build 4</div>
+<div id="build">build 5</div>
 
 <script>
 'use strict';
 
-const BUILD = 4;
+const BUILD = 5;
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
 
@@ -305,12 +306,30 @@ function renderSection(sec) {
   // Existing tasks
   for (const t of sec.tasks) appendTask(sc, sec, t);
 
-  // Single tap/click on empty area to add a task there
+  // Single tap/click on empty area → add a task.
+  // Ignore if the pointer moved (scroll drag): track down position and
+  // only fire when total travel is within TAP_MAX pixels.
+  const TAP_MAX = 8;
+  let tapDown = null;
+  sc.addEventListener('pointerdown', e => {
+    if (e.target !== sc && !e.target.classList.contains('sec-drop-line')) return;
+    tapDown = { x: e.clientX, y: e.clientY };
+  });
+  sc.addEventListener('pointermove', e => {
+    if (!tapDown) return;
+    if (Math.abs(e.clientX - tapDown.x) > TAP_MAX ||
+        Math.abs(e.clientY - tapDown.y) > TAP_MAX) {
+      tapDown = null; // moved too far → not a tap
+    }
+  });
   sc.addEventListener('pointerup', e => {
+    if (!tapDown) return;
+    tapDown = null;
     if (e.target !== sc && !e.target.classList.contains('sec-drop-line')) return;
     const rect = sc.getBoundingClientRect();
     addTask(sec.id, e.clientX - rect.left);
   });
+  sc.addEventListener('pointercancel', () => { tapDown = null; });
 
   row.appendChild(sc);
   scrollWrap.insertBefore(row, addSecRow);
@@ -358,7 +377,8 @@ function setupDrag(bar, sec, task, lh, rh) {
     let lpTimer   = null;
 
     bar.setPointerCapture(e.pointerId);
-    if (isHandle) { bar.classList.add('dragging'); e.preventDefault(); }
+    e.preventDefault(); // prevent text-selection and callout on long-press (all pointer types)
+    if (isHandle) bar.classList.add('dragging');
 
     // Touch long-press on the body → delete menu
     if (e.pointerType === 'touch' && !isHandle) {
