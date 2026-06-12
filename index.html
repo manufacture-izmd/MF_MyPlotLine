@@ -65,6 +65,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   transform: translate(-50%, -50%); cursor: pointer; z-index: 15;
   touch-action: none; transition: box-shadow .15s, transform .1s; }
 .ev-dot:hover { box-shadow: 0 0 0 6px var(--accent-glow); transform: translate(-50%, -50%) scale(1.2); }
+.ev-dot.snapping { box-shadow: 0 0 0 7px var(--accent-glow), 0 0 14px var(--accent); transform: translate(-50%, -50%) scale(1.25); }
 
 /* ── Event label ── */
 .ev-label { position: absolute; top: 7px; transform: translateX(-50%); z-index: 16; }
@@ -160,12 +161,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="ctx"></div>
-<div id="build">build 6</div>
+<div id="build">build 7</div>
 
 <script>
 'use strict';
 
-const BUILD = 6;
+const BUILD = 7;
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
 
@@ -232,6 +233,20 @@ function snapTo(x, excludeId = null) {
   return best; // null if no snap
 }
 
+// Snap x to any task's left or right edge across all sections
+function snapToTaskEdge(x) {
+  let best = null, d = SNAP_DIST;
+  for (const sec of sections) {
+    for (const t of sec.tasks) {
+      for (const edge of [t.x, t.x + t.w]) {
+        const dd = Math.abs(edge - x);
+        if (dd < d) { d = dd; best = edge; }
+      }
+    }
+  }
+  return best; // null if no snap
+}
+
 // ── Render events ─────────────────────────────────
 function renderEvents() {
   tlContent.querySelectorAll('.ev-dot, .ev-label, .ev-drop-line').forEach(el => el.remove());
@@ -257,9 +272,13 @@ function renderEvents() {
         const dx = ev2.clientX - sx;
         if (!moved && Math.abs(dx) < 4) return;
         moved = true;
-        const rect = tlContent.getBoundingClientRect();
-        const nx = Math.max(0, ox + dx);
+        const raw = Math.max(0, ox + dx);
+        const snapped = snapToTaskEdge(raw);
+        const nx = snapped !== null ? snapped : raw;
         ev.x = nx;
+        // Snap visual feedback on the dot
+        if (snapped !== null) dot.classList.add('snapping');
+        else                  dot.classList.remove('snapping');
         // Move dot, label and timeline drop-line live
         dot.style.left = `${nx}px`;
         lw.style.left  = `${nx}px`;
@@ -273,6 +292,7 @@ function renderEvents() {
         dot.removeEventListener('pointermove', onMove);
         dot.removeEventListener('pointerup',   onUp);
         dot.removeEventListener('pointercancel', onUp);
+        dot.classList.remove('snapping');
         if (!moved && li) li.focus(); // tap → focus the label input
       };
 
