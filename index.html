@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MyPlotLine</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #1c2128;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #7d8590;
+  --accent: #f78166;
+  --accent-glow: rgba(247,129,102,.35);
+  --task-bg: #1c3052;
+  --task-bd: #388bfd;
+  --label-w: 160px;
+  --tl-h: 80px;
+  --sec-h: 70px;
+  --content-w: 3200px;
+}
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
+
+#app { height: 100%; display: flex; flex-direction: column; }
+
+/* ── Header ── */
+#header { flex-shrink: 0; height: 44px; background: var(--surface);
+  border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; }
+#header h1 { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+
+/* ── Scroll wrap ── */
+#scroll-wrap { flex: 1; overflow: auto; }
+
+/* ── Row ── */
+.row { display: flex; align-items: stretch; }
+
+/* ── Label cell (sticky-left) ── */
+.row-label { width: var(--label-w); min-width: var(--label-w); flex-shrink: 0;
+  position: sticky; left: 0; z-index: 30; background: var(--surface);
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 14px; }
+
+/* ── Content cell ── */
+.row-content { flex-shrink: 0; width: var(--content-w); position: relative;
+  border-bottom: 1px solid var(--border); background: var(--bg); overflow: visible; }
+
+/* ── Timeline row ── */
+#timeline-row .row-label { height: var(--tl-h); font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .8px; }
+#timeline-row .row-content { height: var(--tl-h); background: var(--surface2); cursor: crosshair; }
+
+#timeline-line { position: absolute; top: 50%; left: 0; right: 0; height: 2px;
+  background: var(--border); pointer-events: none; transform: translateY(-50%); }
+
+/* ── Event dot ── */
+.ev-dot { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow);
+  transform: translate(-50%, -50%); cursor: pointer; z-index: 15;
+  transition: box-shadow .15s, transform .1s; }
+.ev-dot:hover { box-shadow: 0 0 0 6px var(--accent-glow); transform: translate(-50%, -50%) scale(1.2); }
+
+/* ── Event label ── */
+.ev-label { position: absolute; top: 7px; transform: translateX(-50%); z-index: 16; }
+.ev-label input { background: transparent; border: none; border-bottom: 1px solid transparent;
+  color: var(--text); font-size: 10px; width: 88px; text-align: center; outline: none;
+  cursor: default; padding: 1px 3px; }
+.ev-label input:focus { cursor: text; border-bottom-color: var(--accent);
+  background: rgba(247,129,102,.1); border-radius: 2px 2px 0 0; }
+
+/* ── Event drop line (in timeline row, lower half) ── */
+.ev-drop-line { position: absolute; top: calc(50% + 6px); bottom: 0;
+  width: 0; border-left: 1.5px dashed rgba(247,129,102,.5);
+  transform: translateX(-50%); pointer-events: none; z-index: 5; }
+
+/* ── Section row ── */
+.sec-row .row-label { height: var(--sec-h); }
+.sec-row .row-content { height: var(--sec-h); }
+
+.sec-name-input { background: transparent; border: none; outline: none;
+  color: var(--text); font-size: 12px; font-weight: 500; width: 100%; cursor: default; }
+.sec-name-input:focus { cursor: text; }
+
+/* ── Event drop line in section ── */
+.sec-drop-line { position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 1.5px dashed rgba(247,129,102,.3);
+  transform: translateX(-50%); pointer-events: none; z-index: 2; }
+
+/* ── Task bar ── */
+.task-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 34px;
+  background: var(--task-bg); border: 1.5px solid var(--task-bd); border-radius: 6px;
+  display: flex; align-items: center; cursor: grab; user-select: none; z-index: 10;
+  min-width: 50px; transition: box-shadow .1s, border-color .1s; }
+.task-bar:hover { box-shadow: 0 2px 10px rgba(56,139,253,.3); }
+.task-bar.dragging { cursor: grabbing; opacity: .88; z-index: 50; }
+.task-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+
+.task-text { flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text); font-size: 11px; padding: 0 5px; cursor: default;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.task-text:focus { cursor: text; }
+
+.t-handle { width: 10px; height: 100%; cursor: ew-resize; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(255,255,255,.15); font-size: 9px; transition: color .1s; }
+.t-handle:hover { color: rgba(255,255,255,.5); }
+.t-handle.tl { border-radius: 4px 0 0 4px; }
+.t-handle.tr { border-radius: 0 4px 4px 0; }
+
+/* ── Add task btn ── */
+.btn-add-task { position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+  background: transparent; border: 1px dashed var(--border); color: var(--muted);
+  font-size: 10px; padding: 3px 10px; border-radius: 4px; cursor: pointer; z-index: 20;
+  transition: border-color .15s, color .15s; }
+.btn-add-task:hover { border-color: var(--task-bd); color: var(--task-bd); }
+
+/* ── Add section row ── */
+#add-sec-row .row-label { height: 52px; border-bottom: none; padding: 8px 14px; }
+#add-sec-row .row-content { height: 52px; border-bottom: none; background: transparent; }
+
+.btn-add-section { width: 100%; background: transparent; border: 1px dashed var(--border);
+  color: var(--muted); font-size: 11px; padding: 6px 10px; border-radius: 5px; cursor: pointer;
+  transition: border-color .15s, color .15s; }
+.btn-add-section:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Context menu ── */
+#ctx { position: fixed; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 0; z-index: 9999; box-shadow: 0 8px 28px rgba(0,0,0,.6);
+  display: none; min-width: 120px; }
+#ctx div { padding: 7px 16px; cursor: pointer; color: var(--text); font-size: 12px; }
+#ctx div:hover { background: var(--surface2); color: var(--accent); }
+
+/* ── Build badge ── */
+#build { position: fixed; bottom: 8px; right: 12px; font-size: 9px; color: #3d444d;
+  pointer-events: none; z-index: 9999; font-family: monospace; letter-spacing: .5px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="header"><h1>MyPlotLine</h1></div>
+
+  <div id="scroll-wrap">
+    <!-- Timeline row -->
+    <div class="row" id="timeline-row">
+      <div class="row-label">Timeline</div>
+      <div class="row-content" id="tl-content">
+        <div id="timeline-line"></div>
+      </div>
+    </div>
+    <!-- Section rows injected by JS -->
+    <!-- Add section row -->
+    <div class="row" id="add-sec-row">
+      <div class="row-label">
+        <button class="btn-add-section" id="btn-add-sec">＋ セクション追加</button>
+      </div>
+      <div class="row-content"></div>
+    </div>
+  </div>
+</div>
+
+<div id="ctx"></div>
+<div id="build">build 1</div>
+
+<script>
+'use strict';
+
+const BUILD = 1;
+const SNAP_DIST   = 20;
+const TASK_W_DEF  = 180;
+
+let _id = 1;
+const uid = () => _id++;
+
+const events   = [];  // { id, x, text }
+const sections = [];  // { id, name, tasks: [] }
+// task: { id, x, w, text }
+
+const scrollWrap = document.getElementById('scroll-wrap');
+const tlContent  = document.getElementById('tl-content');
+const addSecRow  = document.getElementById('add-sec-row');
+const ctx        = document.getElementById('ctx');
+
+// ── Context menu ──────────────────────────────────
+function showCtx(mx, my, items) {
+  ctx.innerHTML = '';
+  items.forEach(item => {
+    const el = document.createElement('div');
+    el.textContent = item.label;
+    el.addEventListener('click', () => { hideCtx(); item.fn(); });
+    ctx.appendChild(el);
+  });
+  ctx.style.left    = `${mx}px`;
+  ctx.style.top     = `${my}px`;
+  ctx.style.display = 'block';
+}
+function hideCtx() { ctx.style.display = 'none'; }
+document.addEventListener('click', hideCtx);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideCtx(); });
+
+// ── Snap ──────────────────────────────────────────
+function snapTo(x) {
+  let best = null, d = SNAP_DIST;
+  for (const ev of events) { const dd = Math.abs(ev.x - x); if (dd < d) { d = dd; best = ev.x; } }
+  return best; // null if no snap
+}
+
+// ── Render events ─────────────────────────────────
+function renderEvents() {
+  tlContent.querySelectorAll('.ev-dot, .ev-label, .ev-drop-line').forEach(el => el.remove());
+  for (const ev of events) {
+    // Dot
+    const dot = document.createElement('div');
+    dot.className = 'ev-dot';
+    dot.style.left = `${ev.x}px`;
+    dot.addEventListener('contextmenu', e => {
+      e.preventDefault(); e.stopPropagation();
+      showCtx(e.clientX, e.clientY, [{ label: 'イベントを削除', fn: () => deleteEvent(ev.id) }]);
+    });
+    tlContent.appendChild(dot);
+
+    // Label
+    const lw = document.createElement('div');
+    lw.className = 'ev-label';
+    lw.style.left = `${ev.x}px`;
+    const li = document.createElement('input');
+    li.type = 'text'; li.value = ev.text; li.placeholder = 'イベント名';
+    li.setAttribute('data-ev', ev.id);
+    li.addEventListener('mousedown', e => e.stopPropagation());
+    li.addEventListener('input', e => { ev.text = e.target.value; });
+    lw.appendChild(li);
+    tlContent.appendChild(lw);
+
+    // Drop line (bottom half of timeline row)
+    const dl = document.createElement('div');
+    dl.className = 'ev-drop-line';
+    dl.style.left = `${ev.x}px`;
+    tlContent.appendChild(dl);
+  }
+}
+
+// ── Section drop lines ────────────────────────────
+function refreshSecDropLines(secContent) {
+  secContent.querySelectorAll('.sec-drop-line').forEach(el => el.remove());
+  for (const ev of events) {
+    const ln = document.createElement('div');
+    ln.className = 'sec-drop-line';
+    ln.style.left = `${ev.x}px`;
+    secContent.appendChild(ln);
+  }
+}
+
+// ── Render section ────────────────────────────────
+function renderSection(sec) {
+  const row = document.createElement('div');
+  row.className = 'row sec-row';
+  row.id = `sec-row-${sec.id}`;
+
+  // Label cell
+  const lbl = document.createElement('div');
+  lbl.className = 'row-label';
+  const ni = document.createElement('input');
+  ni.type = 'text'; ni.className = 'sec-name-input';
+  ni.value = sec.name; ni.placeholder = 'セクション名';
+  ni.addEventListener('input', e => { sec.name = e.target.value; });
+  lbl.appendChild(ni);
+  row.appendChild(lbl);
+
+  // Content cell
+  const sc = document.createElement('div');
+  sc.className = 'row-content';
+  sc.id = `sc-${sec.id}`;
+
+  // Drop lines from existing events
+  for (const ev of events) {
+    const ln = document.createElement('div');
+    ln.className = 'sec-drop-line';
+    ln.style.left = `${ev.x}px`;
+    sc.appendChild(ln);
+  }
+
+  // Existing tasks
+  for (const t of sec.tasks) appendTask(sc, sec, t);
+
+  // Add task btn
+  const ab = document.createElement('button');
+  ab.className = 'btn-add-task';
+  ab.textContent = '＋ タスク';
+  ab.addEventListener('click', () => addTask(sec.id));
+  sc.appendChild(ab);
+
+  row.appendChild(sc);
+  scrollWrap.insertBefore(row, addSecRow);
+  return ni;
+}
+
+// ── Task element ──────────────────────────────────
+function appendTask(container, sec, task) {
+  const bar = document.createElement('div');
+  bar.className = 'task-bar';
+  bar.id = `task-${task.id}`;
+  bar.style.left  = `${task.x}px`;
+  bar.style.width = `${task.w}px`;
+
+  const lh = document.createElement('div'); lh.className = 't-handle tl'; lh.innerHTML = '⋮';
+  const ti = document.createElement('input');
+  ti.type = 'text'; ti.className = 'task-text'; ti.value = task.text; ti.placeholder = 'タスク名';
+  ti.addEventListener('mousedown', e => e.stopPropagation());
+  ti.addEventListener('input', e => { task.text = e.target.value; });
+  const rh = document.createElement('div'); rh.className = 't-handle tr'; rh.innerHTML = '⋮';
+
+  bar.appendChild(lh); bar.appendChild(ti); bar.appendChild(rh);
+  container.appendChild(bar);
+
+  bar.addEventListener('contextmenu', e => {
+    e.preventDefault(); e.stopPropagation();
+    showCtx(e.clientX, e.clientY, [{ label: 'タスクを削除', fn: () => deleteTask(sec.id, task.id) }]);
+  });
+
+  setupDrag(bar, task, lh, rh);
+  return bar;
+}
+
+// ── Drag ──────────────────────────────────────────
+function setupDrag(bar, task, lh, rh) {
+  bar.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'INPUT') return;
+    let mode;
+    if (e.target === lh) mode = 'l';
+    else if (e.target === rh) mode = 'r';
+    else mode = 'move';
+
+    const sx = e.clientX, st = { x: task.x, w: task.w };
+    bar.classList.add('dragging');
+    e.preventDefault();
+
+    const onMove = e => {
+      const dx = e.clientX - sx;
+      if (mode === 'move') {
+        const raw = Math.max(0, st.x + dx);
+        const sl  = snapTo(raw);
+        const sr  = snapTo(raw + task.w);
+        if (sl !== null) { task.x = sl; bar.classList.add('snapping'); }
+        else if (sr !== null) { task.x = sr - task.w; bar.classList.add('snapping'); }
+        else { task.x = raw; bar.classList.remove('snapping'); }
+        bar.style.left = `${task.x}px`;
+      } else if (mode === 'r') {
+        task.w = Math.max(50, st.w + dx);
+        bar.style.width = `${task.w}px`;
+      } else {
+        const nw = Math.max(50, st.w - dx);
+        const nx = Math.max(0, st.x + st.w - nw);
+        task.x = nx; task.w = nw;
+        bar.style.left = `${nx}px`; bar.style.width = `${nw}px`;
+      }
+    };
+    const onUp = () => {
+      bar.classList.remove('dragging', 'snapping');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+// ── Actions ───────────────────────────────────────
+function addEvent(x) {
+  const ev = { id: uid(), x, text: '' };
+  events.push(ev);
+  renderEvents();
+  // Add drop lines to all sections
+  for (const sec of sections) {
+    const sc = document.getElementById(`sc-${sec.id}`);
+    if (!sc) continue;
+    const ln = document.createElement('div');
+    ln.className = 'sec-drop-line';
+    ln.style.left = `${ev.x}px`;
+    sc.appendChild(ln);
+  }
+  requestAnimationFrame(() => {
+    const inp = document.querySelector(`[data-ev="${ev.id}"]`);
+    if (inp) inp.focus();
+  });
+}
+
+function deleteEvent(id) {
+  const i = events.findIndex(e => e.id === id);
+  if (i < 0) return;
+  events.splice(i, 1);
+  renderEvents();
+  for (const sec of sections) {
+    const sc = document.getElementById(`sc-${sec.id}`);
+    if (sc) refreshSecDropLines(sc);
+  }
+}
+
+function addSection() {
+  const sec = { id: uid(), name: '', tasks: [] };
+  sections.push(sec);
+  const ni = renderSection(sec);
+  requestAnimationFrame(() => ni.focus());
+}
+
+function addTask(secId) {
+  const sec = sections.find(s => s.id === secId);
+  if (!sec) return;
+  const last = sec.tasks[sec.tasks.length - 1];
+  const x = last ? last.x + last.w + 12 : 20;
+  const task = { id: uid(), x, w: TASK_W_DEF, text: '' };
+  sec.tasks.push(task);
+  const sc = document.getElementById(`sc-${secId}`);
+  if (!sc) return;
+  appendTask(sc, sec, task);
+  requestAnimationFrame(() => {
+    const inp = document.querySelector(`#task-${task.id} input`);
+    if (inp) inp.focus();
+  });
+}
+
+function deleteTask(secId, taskId) {
+  const sec = sections.find(s => s.id === secId);
+  if (!sec) return;
+  const i = sec.tasks.findIndex(t => t.id === taskId);
+  if (i >= 0) sec.tasks.splice(i, 1);
+  const el = document.getElementById(`task-${taskId}`);
+  if (el) el.remove();
+}
+
+// ── Timeline click ────────────────────────────────
+tlContent.addEventListener('click', e => {
+  if (e.target !== tlContent && !e.target.matches('#timeline-line')) return;
+  const rect = tlContent.getBoundingClientRect();
+  addEvent(e.clientX - rect.left);
+});
+
+// ── Init ──────────────────────────────────────────
+document.getElementById('btn-add-sec').addEventListener('click', addSection);
+addSection(); // start with one section
+</script>
+</body>
+</html>
