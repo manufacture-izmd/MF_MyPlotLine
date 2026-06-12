@@ -80,7 +80,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 /* ── Section row ── */
 .sec-row .row-label { height: var(--sec-h); }
-.sec-row .row-content { height: var(--sec-h); }
+.sec-row .row-content { height: var(--sec-h); cursor: copy; }
 
 .sec-name-input { background: transparent; border: none; outline: none;
   color: var(--text); font-size: 12px; font-weight: 500; width: 100%; cursor: default; }
@@ -111,13 +111,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .t-handle:hover { color: rgba(255,255,255,.5); }
 .t-handle.tl { border-radius: 4px 0 0 4px; }
 .t-handle.tr { border-radius: 0 4px 4px 0; }
-
-/* ── Add task btn ── */
-.btn-add-task { position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
-  background: transparent; border: 1px dashed var(--border); color: var(--muted);
-  font-size: 10px; padding: 3px 10px; border-radius: 4px; cursor: pointer; z-index: 20;
-  transition: border-color .15s, color .15s; }
-.btn-add-task:hover { border-color: var(--task-bd); color: var(--task-bd); }
 
 /* ── Add section row ── */
 #add-sec-row .row-label { height: 52px; border-bottom: none; padding: 8px 14px; }
@@ -165,12 +158,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="ctx"></div>
-<div id="build">build 1</div>
+<div id="build">build 2</div>
 
 <script>
 'use strict';
 
-const BUILD = 1;
+const BUILD = 2;
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
 
@@ -287,12 +280,12 @@ function renderSection(sec) {
   // Existing tasks
   for (const t of sec.tasks) appendTask(sc, sec, t);
 
-  // Add task btn
-  const ab = document.createElement('button');
-  ab.className = 'btn-add-task';
-  ab.textContent = '＋ タスク';
-  ab.addEventListener('click', () => addTask(sec.id));
-  sc.appendChild(ab);
+  // Double-click on empty area to add a task at that position
+  sc.addEventListener('dblclick', e => {
+    if (e.target !== sc && !e.target.classList.contains('sec-drop-line')) return;
+    const rect = sc.getBoundingClientRect();
+    addTask(sec.id, e.clientX - rect.left);
+  });
 
   row.appendChild(sc);
   scrollWrap.insertBefore(row, addSecRow);
@@ -407,11 +400,21 @@ function addSection() {
   requestAnimationFrame(() => ni.focus());
 }
 
-function addTask(secId) {
+function addTask(secId, clickX) {
   const sec = sections.find(s => s.id === secId);
   if (!sec) return;
-  const last = sec.tasks[sec.tasks.length - 1];
-  const x = last ? last.x + last.w + 12 : 20;
+  let x;
+  if (clickX != null) {
+    // Center the new bar on the double-click point, then snap edges to events
+    x = Math.max(0, clickX - TASK_W_DEF / 2);
+    const sl = snapTo(x);
+    const sr = snapTo(x + TASK_W_DEF);
+    if (sl !== null) x = sl;
+    else if (sr !== null) x = sr - TASK_W_DEF;
+  } else {
+    const last = sec.tasks[sec.tasks.length - 1];
+    x = last ? last.x + last.w + 12 : 20;
+  }
   const task = { id: uid(), x, w: TASK_W_DEF, text: '' };
   sec.tasks.push(task);
   const sc = document.getElementById(`sc-${secId}`);
