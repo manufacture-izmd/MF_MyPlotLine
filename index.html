@@ -187,7 +187,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 10;
+const BUILD = 11;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -625,7 +625,7 @@ function setupDrag(bar, sec, task, lh, rh) {
     const mode       = pressedLH ? 'l' : pressedRH ? 'r' : 'move';
     const input      = bar.querySelector('.task-text');
     const sx = e.clientX, st = { x: task.x, w: task.w };
-    let started   = isHandle;
+    let started   = false; // true only after actual movement; handles tap detection for lh/rh
     let menuShown = false;
     let lpTimer   = null;
 
