@@ -95,7 +95,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 /* ── Task bar ── */
 .task-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 36px;
-  background: var(--task-bg); border: 1.5px solid var(--task-bd); border-radius: 6px;
+  background: var(--task-bg); border: 1.5px solid var(--task-bd); border-radius: 0;
   display: flex; align-items: center; cursor: grab; user-select: none;
   -webkit-user-select: none; -webkit-touch-callout: none; z-index: 10;
   min-width: 50px; touch-action: none; transition: box-shadow .1s, border-color .1s; }
@@ -104,9 +104,17 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .task-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 
 /* ── Trapezoid SVG shape (replaces CSS border when fade is active) ── */
-.task-shape-svg  { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: -1; }
+.task-shape-svg  { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: -1;
+  transition: filter .1s; }
 .task-shape-poly { fill: var(--task-bg); stroke: var(--task-bd); stroke-width: 1.5px; }
+/* When a fade is active the SVG paints the shape, so suppress the rectangular
+   box-shadow and let the glow follow the trapezoid via an SVG drop-shadow. */
+.task-bar.has-fade,
+.task-bar.has-fade:hover,
+.task-bar.has-fade.snapping { box-shadow: none; }
+.task-bar.has-fade:hover  .task-shape-svg { filter: drop-shadow(0 2px 8px rgba(56,139,253,.45)); }
 .task-bar.snapping .task-shape-poly { stroke: var(--accent); }
+.task-bar.has-fade.snapping .task-shape-svg { filter: drop-shadow(0 0 4px var(--accent)); }
 
 /* ── Fade handles ── */
 .fade-handle {
@@ -138,8 +146,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   display: flex; align-items: center; justify-content: center;
   color: rgba(255,255,255,.2); font-size: 9px; transition: color .1s; }
 .t-handle:hover { color: rgba(255,255,255,.5); }
-.t-handle.tl { border-radius: 4px 0 0 4px; }
-.t-handle.tr { border-radius: 0 4px 4px 0; }
+.t-handle.tl, .t-handle.tr { border-radius: 0; }
 
 /* ── Add section row ── */
 #add-sec-row .row-label { height: 52px; border-bottom: none; padding: 8px 14px; }
@@ -192,7 +199,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 13;
+const BUILD = 14;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -516,9 +523,10 @@ function updateTaskShape(bar, task) {
   bar.querySelector('.task-shape-svg')?.remove();
 
   if (fi === 0 && fo === 0) {
-    // Plain rectangle: restore CSS border/background
+    // Plain (square) rectangle: restore CSS border/background
+    bar.classList.remove('has-fade');
     bar.style.clipPath     = '';
-    bar.style.borderRadius = '6px';
+    bar.style.borderRadius = '';
     bar.style.background   = '';
     bar.style.border       = '';
   } else {
@@ -537,6 +545,7 @@ function updateTaskShape(bar, task) {
     bar.insertBefore(svg, bar.firstChild);
 
     // Let SVG handle visual; hide the CSS border/background
+    bar.classList.add('has-fade');
     bar.style.clipPath     = '';
     bar.style.borderRadius = '0';
     bar.style.background   = 'transparent';
