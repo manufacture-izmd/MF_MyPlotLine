@@ -170,12 +170,14 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="ctx"></div>
-<div id="build">build 8</div>
+<div id="build"></div>
 
 <script>
 'use strict';
 
 const BUILD = 9;
+document.getElementById('build').textContent = `build ${BUILD}`;
+
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
 const TASK_H      = 36;   // task bar height (px)
