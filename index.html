@@ -136,12 +136,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 /* ── Edge-alignment markers ── */
 .task-mark {
-  position: absolute; top: -18px; font-size: 17px; line-height: 1;
-  color: var(--accent); pointer-events: none; z-index: 20; font-weight: 700;
-  filter: drop-shadow(0 0 3px var(--accent));
+  position: absolute; top: -18px;
+  color: var(--accent); pointer-events: none; z-index: 20;
+  filter: drop-shadow(0 0 4px var(--accent));
+  transform: translateX(-50%);
 }
-.task-mark-l { left: 0;  transform: translateX(-50%); }
-.task-mark-r { right: 0; transform: translateX(50%); }
+.task-mark-l { left: 0; }
 
 .task-text { flex: 1; background: transparent; border: none; outline: none;
   color: var(--text); font-size: 11px; padding: 0 5px; cursor: default;
@@ -205,7 +205,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 19;
+const BUILD = 20;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -313,6 +313,25 @@ function snapMoveX(rawX, task) {
 // ── Edge-alignment markers ─────────────────────────
 const ALIGN_TOL = 1.5; // px — treat as aligned if within this distance
 
+function makeChevronMark() {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = document.createElement('div');
+  el.className = 'task-mark';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('width', '20'); svg.setAttribute('height', '13');
+  svg.setAttribute('viewBox', '0 0 20 13');
+  const pl = document.createElementNS(NS, 'polyline');
+  pl.setAttribute('points', '1,1 10,12 19,1');
+  pl.setAttribute('fill', 'none');
+  pl.setAttribute('stroke', 'currentColor');
+  pl.setAttribute('stroke-width', '2.5');
+  pl.setAttribute('stroke-linecap', 'round');
+  pl.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(pl);
+  el.appendChild(svg);
+  return el;
+}
+
 function updateTaskMarkers(bar, task) {
   bar.querySelectorAll('.task-mark').forEach(el => el.remove());
 
@@ -322,27 +341,23 @@ function updateTaskMarkers(bar, task) {
     for (const t of sec.tasks)
       if (t.id !== task.id) targets.push(t.x + t.w);
 
-  // ↓ at left edge when it aligns with any target
+  // Chevron at left edge when it aligns with any target
   for (const tgt of targets) {
     if (Math.abs(task.x - tgt) < ALIGN_TOL) {
-      const m = document.createElement('span');
-      m.className = 'task-mark task-mark-l';
-      m.textContent = '↓';
+      const m = makeChevronMark();
+      m.classList.add('task-mark-l');
       bar.appendChild(m);
       break;
     }
   }
 
-  // ↓ at fade-out start position when it aligns with any target
+  // Chevron at fade-out start position when it aligns with any target
   if (task.fadeOut > 0) {
     const foAbs = task.x + task.w - task.fadeOut;
     for (const tgt of targets) {
       if (Math.abs(foAbs - tgt) < ALIGN_TOL) {
-        const m = document.createElement('span');
-        m.className = 'task-mark';
-        m.style.left      = `${task.w - task.fadeOut}px`;
-        m.style.transform = 'translateX(-50%)';
-        m.textContent = '↓';
+        const m = makeChevronMark();
+        m.style.left = `${task.w - task.fadeOut}px`;
         bar.appendChild(m);
         break;
       }
