@@ -205,7 +205,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 20;
+const BUILD = 21;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -701,6 +701,8 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
         handle.style.left = `${task.w - task.fadeOut}px`;
       }
       updateTaskShape(bar, task);
+      updateTaskMarkers(bar, task);
+      updateTaskEdgeLines();
     };
     const onUp = ev => {
       handle.removeEventListener('pointermove', onMove);
@@ -712,6 +714,8 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
       if ((type === 'in' && task.fadeIn <= 0) || (type === 'out' && task.fadeOut <= 0)) {
         delFn();
       }
+      updateTaskMarkers(bar, task);
+      updateTaskEdgeLines();
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup',   onUp);
