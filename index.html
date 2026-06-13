@@ -123,20 +123,20 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 /* ── Fade handles ── */
 .fade-handle {
-  position: absolute; top: 0; width: 12px; height: 12px; border-radius: 50%;
-  background: #fff; border: 2px solid var(--accent);
+  position: absolute; top: 0; width: 8px; height: 8px; border-radius: 50%;
+  background: #fff; border: 1.5px solid var(--accent);
   transform: translate(-50%, -50%);
   cursor: ew-resize; z-index: 25; touch-action: none;
   -webkit-user-select: none; user-select: none;
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: 0 0 0 2px var(--accent-glow);
   transition: box-shadow .1s;
 }
-.fade-handle:hover { box-shadow: 0 0 0 5px var(--accent-glow); }
-.fade-handle.snapping { box-shadow: 0 0 0 6px var(--accent-glow), 0 0 10px var(--accent); }
+.fade-handle:hover { box-shadow: 0 0 0 4px var(--accent-glow); }
+.fade-handle.snapping { box-shadow: 0 0 0 5px var(--accent-glow), 0 0 8px var(--accent); }
 
 /* ── Edge-alignment markers ── */
 .task-mark {
-  position: absolute; top: -15px; font-size: 12px; line-height: 1;
+  position: absolute; top: -18px; font-size: 17px; line-height: 1;
   color: var(--accent); pointer-events: none; z-index: 20; font-weight: 700;
   filter: drop-shadow(0 0 3px var(--accent));
 }
@@ -205,7 +205,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 18;
+const BUILD = 19;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -350,27 +350,29 @@ function updateTaskMarkers(bar, task) {
   }
 }
 
-// Returns set of x values where some task's right edge is "aligned to" by
-// another task's left edge or fade-out start — used to draw drop lines.
+// All reference points of a task: left edge, right edge, fade-in start, fade-out start.
+function taskRefPoints(t) {
+  const pts = [t.x, t.x + t.w];
+  if (t.fadeIn  > 0) pts.push(t.x + t.fadeIn);
+  if (t.fadeOut > 0) pts.push(t.x + t.w - t.fadeOut);
+  return pts;
+}
+
+// Returns set of x positions where any two reference points of *different*
+// tasks coincide — i.e. every place something is snapped. A drop line is drawn
+// at each, regardless of whether a ↓ marker is shown there. (Event positions
+// already get their own drop lines, so those are not duplicated here.)
 function collectAlignedTaskEdges() {
+  const pts = []; // { x, tid }
+  for (const sec of sections)
+    for (const t of sec.tasks)
+      for (const x of taskRefPoints(t)) pts.push({ x, tid: t.id });
+
   const xs = new Set();
-  for (const sec of sections) {
-    for (const t of sec.tasks) {
-      const targets = events.map(ev => ev.x);
-      for (const sec2 of sections)
-        for (const t2 of sec2.tasks)
-          if (t2.id !== t.id) targets.push(t2.x + t2.w);
-      // Check: does another task's right edge align to t.x or t's fade-out start?
-      for (const sec2 of sections) {
-        for (const t2 of sec2.tasks) {
-          if (t2.id === t.id) continue;
-          const re = t2.x + t2.w;
-          if (Math.abs(t.x - re) < ALIGN_TOL) xs.add(re);
-          if (t.fadeOut > 0 && Math.abs((t.x + t.w - t.fadeOut) - re) < ALIGN_TOL) xs.add(re);
-        }
-      }
-    }
-  }
+  for (let i = 0; i < pts.length; i++)
+    for (let j = i + 1; j < pts.length; j++)
+      if (pts[i].tid !== pts[j].tid && Math.abs(pts[i].x - pts[j].x) < ALIGN_TOL)
+        xs.add(Math.round((pts[i].x + pts[j].x) / 2));
   return xs;
 }
 
