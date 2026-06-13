@@ -93,6 +93,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   border-left: 1.5px dashed rgba(247,129,102,.3);
   transform: translateX(-50%); pointer-events: none; z-index: 2; }
 
+/* ── Task right-edge drop line (drawn when another task aligns to it) ── */
+.task-edge-line { position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 1.5px dashed rgba(56,139,253,.45);
+  transform: translateX(-50%); pointer-events: none; z-index: 3; }
+
 /* ── Task bar ── */
 .task-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 36px;
   background: var(--task-bg); border: 1.5px solid var(--task-bd); border-radius: 0;
@@ -200,7 +205,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 17;
+const BUILD = 18;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -310,23 +315,78 @@ const ALIGN_TOL = 1.5; // px — treat as aligned if within this distance
 
 function updateTaskMarkers(bar, task) {
   bar.querySelectorAll('.task-mark').forEach(el => el.remove());
-  let hasL = false, hasR = false;
-  for (const ev of events) {
-    if (!hasL && Math.abs(task.x - ev.x) < ALIGN_TOL) {
+
+  // Snap targets: event positions + other tasks' right edges
+  const targets = events.map(ev => ev.x);
+  for (const sec of sections)
+    for (const t of sec.tasks)
+      if (t.id !== task.id) targets.push(t.x + t.w);
+
+  // ↓ at left edge when it aligns with any target
+  for (const tgt of targets) {
+    if (Math.abs(task.x - tgt) < ALIGN_TOL) {
       const m = document.createElement('span');
       m.className = 'task-mark task-mark-l';
       m.textContent = '↓';
       bar.appendChild(m);
-      hasL = true;
+      break;
     }
-    if (!hasR && Math.abs((task.x + task.w) - ev.x) < ALIGN_TOL) {
-      const m = document.createElement('span');
-      m.className = 'task-mark task-mark-r';
-      m.textContent = '↑';
-      bar.appendChild(m);
-      hasR = true;
+  }
+
+  // ↓ at fade-out start position when it aligns with any target
+  if (task.fadeOut > 0) {
+    const foAbs = task.x + task.w - task.fadeOut;
+    for (const tgt of targets) {
+      if (Math.abs(foAbs - tgt) < ALIGN_TOL) {
+        const m = document.createElement('span');
+        m.className = 'task-mark';
+        m.style.left      = `${task.w - task.fadeOut}px`;
+        m.style.transform = 'translateX(-50%)';
+        m.textContent = '↓';
+        bar.appendChild(m);
+        break;
+      }
     }
-    if (hasL && hasR) break;
+  }
+}
+
+// Returns set of x values where some task's right edge is "aligned to" by
+// another task's left edge or fade-out start — used to draw drop lines.
+function collectAlignedTaskEdges() {
+  const xs = new Set();
+  for (const sec of sections) {
+    for (const t of sec.tasks) {
+      const targets = events.map(ev => ev.x);
+      for (const sec2 of sections)
+        for (const t2 of sec2.tasks)
+          if (t2.id !== t.id) targets.push(t2.x + t2.w);
+      // Check: does another task's right edge align to t.x or t's fade-out start?
+      for (const sec2 of sections) {
+        for (const t2 of sec2.tasks) {
+          if (t2.id === t.id) continue;
+          const re = t2.x + t2.w;
+          if (Math.abs(t.x - re) < ALIGN_TOL) xs.add(re);
+          if (t.fadeOut > 0 && Math.abs((t.x + t.w - t.fadeOut) - re) < ALIGN_TOL) xs.add(re);
+        }
+      }
+    }
+  }
+  return xs;
+}
+
+function updateTaskEdgeLines() {
+  document.querySelectorAll('.task-edge-line').forEach(el => el.remove());
+  const xs = collectAlignedTaskEdges();
+  if (xs.size === 0) return;
+  for (const sec of sections) {
+    const sc = document.getElementById(`sc-${sec.id}`);
+    if (!sc) continue;
+    for (const x of xs) {
+      const ln = document.createElement('div');
+      ln.className = 'task-edge-line';
+      ln.style.left = `${x}px`;
+      sc.appendChild(ln);
+    }
   }
 }
 
@@ -337,6 +397,7 @@ function updateAllTaskMarkers() {
       if (bar) updateTaskMarkers(bar, t);
     }
   }
+  updateTaskEdgeLines();
 }
 
 // ── Lane layout ───────────────────────────────────
@@ -757,6 +818,7 @@ function setupDrag(bar, sec, task, lh, rh) {
         updateFadeHandles(bar, sec, task); // keep fade dots glued to the slope
       }
       updateTaskMarkers(bar, task);
+      updateTaskEdgeLines();
       layoutSection(sec, task.id);
     };
 
@@ -771,6 +833,7 @@ function setupDrag(bar, sec, task, lh, rh) {
       updateTaskShape(bar, task);
       updateFadeHandles(bar, sec, task); // reposition after resize
       updateTaskMarkers(bar, task);
+      updateTaskEdgeLines();
 
       if (!started && !menuShown) {
         // Tap on lh/rh → fade menu (if no fade yet)
