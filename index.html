@@ -16,8 +16,8 @@
   --muted: #7d8590;
   --accent: #f78166;
   --accent-glow: rgba(247,129,102,.35);
-  --task-bg: #1c3052;
-  --task-bd: #388bfd;
+  --action-bg: #1c3052;
+  --action-bd: #388bfd;
   --label-w: 160px;
   --tl-h: 80px;
   --sec-h: 70px;
@@ -100,33 +100,33 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   border-left: 1.5px dashed rgba(247,129,102,.3);
   transform: translateX(-50%); pointer-events: none; z-index: 2; }
 
-/* ── Task right-edge drop line (drawn when another task aligns to it) ── */
-.task-edge-line { position: absolute; top: 0; bottom: 0; width: 0;
+/* ── Action right-edge drop line (drawn when another action aligns to it) ── */
+.action-edge-line { position: absolute; top: 0; bottom: 0; width: 0;
   border-left: 1.5px dashed rgba(56,139,253,.45);
   transform: translateX(-50%); pointer-events: none; z-index: 3; }
 
-/* ── Task bar ── */
-.task-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 36px;
-  background: var(--task-bg); border: 1.5px solid var(--task-bd); border-radius: 0;
+/* ── Action bar ── */
+.action-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 36px;
+  background: var(--action-bg); border: 1.5px solid var(--action-bd); border-radius: 0;
   display: flex; align-items: center; cursor: grab; user-select: none;
   -webkit-user-select: none; -webkit-touch-callout: none; z-index: 10;
   min-width: 50px; touch-action: none; transition: box-shadow .1s, border-color .1s; }
-.task-bar:hover { box-shadow: 0 2px 10px rgba(56,139,253,.3); }
-.task-bar.dragging { cursor: grabbing; opacity: .88; z-index: 50; }
-.task-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+.action-bar:hover { box-shadow: 0 2px 10px rgba(56,139,253,.3); }
+.action-bar.dragging { cursor: grabbing; opacity: .88; z-index: 50; }
+.action-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 
 /* ── Trapezoid SVG shape (replaces CSS border when fade is active) ── */
-.task-shape-svg  { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: -1;
+.action-shape-svg  { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: -1;
   transition: filter .1s; }
-.task-shape-poly { fill: var(--task-bg); stroke: var(--task-bd); stroke-width: 1.5px; }
+.action-shape-poly { fill: var(--action-bg); stroke: var(--action-bd); stroke-width: 1.5px; }
 /* When a fade is active the SVG paints the shape, so suppress the rectangular
    box-shadow and let the glow follow the trapezoid via an SVG drop-shadow. */
-.task-bar.has-fade,
-.task-bar.has-fade:hover,
-.task-bar.has-fade.snapping { box-shadow: none; }
-.task-bar.has-fade:hover  .task-shape-svg { filter: drop-shadow(0 2px 8px rgba(56,139,253,.45)); }
-.task-bar.snapping .task-shape-poly { stroke: var(--accent); }
-.task-bar.has-fade.snapping .task-shape-svg { filter: drop-shadow(0 0 4px var(--accent)); }
+.action-bar.has-fade,
+.action-bar.has-fade:hover,
+.action-bar.has-fade.snapping { box-shadow: none; }
+.action-bar.has-fade:hover  .action-shape-svg { filter: drop-shadow(0 2px 8px rgba(56,139,253,.45)); }
+.action-bar.snapping .action-shape-poly { stroke: var(--accent); }
+.action-bar.has-fade.snapping .action-shape-svg { filter: drop-shadow(0 0 4px var(--accent)); }
 
 /* ── Fade handles ── */
 .fade-handle {
@@ -142,18 +142,18 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .fade-handle.snapping { box-shadow: 0 0 0 5px var(--accent-glow), 0 0 8px var(--accent); }
 
 /* ── Edge-alignment markers ── */
-.task-mark {
+.action-mark {
   position: absolute; top: -18px;
   color: var(--accent); pointer-events: none; z-index: 20;
   filter: drop-shadow(0 0 4px var(--accent));
   transform: translateX(-50%);
 }
-.task-mark-l { left: 0; }
+.action-mark-l { left: 0; }
 
-.task-text { flex: 1; background: transparent; border: none; outline: none;
+.action-text { flex: 1; background: transparent; border: none; outline: none;
   color: var(--text); font-size: 11px; padding: 0 5px; cursor: default;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.task-text:focus { cursor: text; }
+.action-text:focus { cursor: text; }
 
 .t-handle { width: 14px; height: 100%; cursor: ew-resize; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -238,21 +238,21 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 24;
+const BUILD = 25;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
-const TASK_W_DEF  = 180;
-const TASK_H      = 36;   // task bar height (px)
-const LANE_H      = 42;   // height per lane  (task + 6px gap)
+const ACTION_W_DEF  = 180;
+const ACTION_H      = 36;   // action bar height (px)
+const LANE_H      = 42;   // height per lane  (action + 6px gap)
 const LANE_PAD    = 14;   // section top/bottom padding
 
 let _id = 1;
 const uid = () => _id++;
 
 const events   = [];  // { id, x, text }
-const sections = [];  // { id, name, tasks: [] }
-// task: { id, x, w, text }
+const sections = [];  // { id, name, actions: [] }
+// action: { id, x, w, text }
 
 const scrollWrap = document.getElementById('scroll-wrap');
 const tlContent  = document.getElementById('tl-content');
@@ -281,7 +281,12 @@ function loadData() {
     const data = JSON.parse(raw);
     _id = data._id ?? 1;
     events.push(...(data.events ?? []));
-    sections.push(...(data.sections ?? []));
+    const secs = data.sections ?? [];
+    // Migrate legacy field name: sections used to store their items as `tasks`.
+    for (const sec of secs) {
+      if (sec.tasks && !sec.actions) { sec.actions = sec.tasks; delete sec.tasks; }
+    }
+    sections.push(...secs);
     return true;
   } catch (_) { return false; }
 }
@@ -349,10 +354,10 @@ function attachLongPress(el, handler) {
 }
 
 // ── Snap ──────────────────────────────────────────
-// Unified: snaps x to events, task edges, and task fade positions.
-// excludeTaskId: skip this task's own snap points (use when moving/resizing that task).
+// Unified: snaps x to events, action edges, and action fade positions.
+// excludeActionId: skip this action's own snap points (use when moving/resizing that action).
 // excludeEvId:   skip this event's own position (use when dragging that event).
-function snapToAny(x, excludeTaskId = null, excludeEvId = null) {
+function snapToAny(x, excludeActionId = null, excludeEvId = null) {
   let best = null, d = SNAP_DIST;
   for (const ev of events) {
     if (ev.id === excludeEvId) continue;
@@ -360,8 +365,8 @@ function snapToAny(x, excludeTaskId = null, excludeEvId = null) {
     if (dd < d) { d = dd; best = ev.x; }
   }
   for (const sec of sections) {
-    for (const t of sec.tasks) {
-      if (t.id === excludeTaskId) continue;
+    for (const t of sec.actions) {
+      if (t.id === excludeActionId) continue;
       const pts = [t.x, t.x + t.w];
       if (t.fadeIn  > 0) pts.push(t.x + t.fadeIn);
       if (t.fadeOut > 0) pts.push(t.x + t.w - t.fadeOut);
@@ -374,16 +379,16 @@ function snapToAny(x, excludeTaskId = null, excludeEvId = null) {
   return best; // null if no snap
 }
 
-// When moving a whole task, every reference point on it (left edge, right edge,
+// When moving a whole action, every reference point on it (left edge, right edge,
 // fade-in line, fade-out line) should be able to snap. Try all of them and pick
-// the closest snap, returning the resulting task left-edge x (or null for none).
-function snapMoveX(rawX, task) {
-  const offsets = [0, task.w];               // left edge, right edge
-  if (task.fadeIn  > 0) offsets.push(task.fadeIn);          // fade-in line
-  if (task.fadeOut > 0) offsets.push(task.w - task.fadeOut); // fade-out line
+// the closest snap, returning the resulting action left-edge x (or null for none).
+function snapMoveX(rawX, action) {
+  const offsets = [0, action.w];               // left edge, right edge
+  if (action.fadeIn  > 0) offsets.push(action.fadeIn);          // fade-in line
+  if (action.fadeOut > 0) offsets.push(action.w - action.fadeOut); // fade-out line
   let bestX = null, bestD = SNAP_DIST;
   for (const off of offsets) {
-    const snapped = snapToAny(rawX + off, task.id);
+    const snapped = snapToAny(rawX + off, action.id);
     if (snapped === null) continue;
     const d = Math.abs(snapped - (rawX + off));
     if (d < bestD) { bestD = d; bestX = snapped - off; }
@@ -397,7 +402,7 @@ const ALIGN_TOL = 1.5; // px — treat as aligned if within this distance
 function makeChevronMark() {
   const NS = 'http://www.w3.org/2000/svg';
   const el = document.createElement('div');
-  el.className = 'task-mark';
+  el.className = 'action-mark';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('width', '20'); svg.setAttribute('height', '13');
   svg.setAttribute('viewBox', '0 0 20 13');
@@ -413,32 +418,32 @@ function makeChevronMark() {
   return el;
 }
 
-function updateTaskMarkers(bar, task) {
-  bar.querySelectorAll('.task-mark').forEach(el => el.remove());
+function updateActionMarkers(bar, action) {
+  bar.querySelectorAll('.action-mark').forEach(el => el.remove());
 
-  // Snap targets: event positions + other tasks' right edges
+  // Snap targets: event positions + other actions' right edges
   const targets = events.map(ev => ev.x);
   for (const sec of sections)
-    for (const t of sec.tasks)
-      if (t.id !== task.id) targets.push(t.x + t.w);
+    for (const t of sec.actions)
+      if (t.id !== action.id) targets.push(t.x + t.w);
 
   // Chevron at left edge when it aligns with any target
   for (const tgt of targets) {
-    if (Math.abs(task.x - tgt) < ALIGN_TOL) {
+    if (Math.abs(action.x - tgt) < ALIGN_TOL) {
       const m = makeChevronMark();
-      m.classList.add('task-mark-l');
+      m.classList.add('action-mark-l');
       bar.appendChild(m);
       break;
     }
   }
 
   // Chevron at fade-out start position when it aligns with any target
-  if (task.fadeOut > 0) {
-    const foAbs = task.x + task.w - task.fadeOut;
+  if (action.fadeOut > 0) {
+    const foAbs = action.x + action.w - action.fadeOut;
     for (const tgt of targets) {
       if (Math.abs(foAbs - tgt) < ALIGN_TOL) {
         const m = makeChevronMark();
-        m.style.left = `${task.w - task.fadeOut}px`;
+        m.style.left = `${action.w - action.fadeOut}px`;
         bar.appendChild(m);
         break;
       }
@@ -446,8 +451,8 @@ function updateTaskMarkers(bar, task) {
   }
 }
 
-// All reference points of a task: left edge, right edge, fade-in start, fade-out start.
-function taskRefPoints(t) {
+// All reference points of a action: left edge, right edge, fade-in start, fade-out start.
+function actionRefPoints(t) {
   const pts = [t.x, t.x + t.w];
   if (t.fadeIn  > 0) pts.push(t.x + t.fadeIn);
   if (t.fadeOut > 0) pts.push(t.x + t.w - t.fadeOut);
@@ -455,14 +460,14 @@ function taskRefPoints(t) {
 }
 
 // Returns set of x positions where any two reference points of *different*
-// tasks coincide — i.e. every place something is snapped. A drop line is drawn
+// actions coincide — i.e. every place something is snapped. A drop line is drawn
 // at each, regardless of whether a ↓ marker is shown there. (Event positions
 // already get their own drop lines, so those are not duplicated here.)
-function collectAlignedTaskEdges() {
+function collectAlignedActionEdges() {
   const pts = []; // { x, tid }
   for (const sec of sections)
-    for (const t of sec.tasks)
-      for (const x of taskRefPoints(t)) pts.push({ x, tid: t.id });
+    for (const t of sec.actions)
+      for (const x of actionRefPoints(t)) pts.push({ x, tid: t.id });
 
   const xs = new Set();
   for (let i = 0; i < pts.length; i++)
@@ -472,38 +477,38 @@ function collectAlignedTaskEdges() {
   return xs;
 }
 
-function updateTaskEdgeLines() {
-  document.querySelectorAll('.task-edge-line').forEach(el => el.remove());
-  const xs = collectAlignedTaskEdges();
+function updateActionEdgeLines() {
+  document.querySelectorAll('.action-edge-line').forEach(el => el.remove());
+  const xs = collectAlignedActionEdges();
   if (xs.size === 0) return;
   for (const sec of sections) {
     const sc = document.getElementById(`sc-${sec.id}`);
     if (!sc) continue;
     for (const x of xs) {
       const ln = document.createElement('div');
-      ln.className = 'task-edge-line';
+      ln.className = 'action-edge-line';
       ln.style.left = `${x}px`;
       sc.appendChild(ln);
     }
   }
 }
 
-function updateAllTaskMarkers() {
+function updateAllActionMarkers() {
   for (const sec of sections) {
-    for (const t of sec.tasks) {
-      const bar = document.getElementById(`task-${t.id}`);
-      if (bar) updateTaskMarkers(bar, t);
+    for (const t of sec.actions) {
+      const bar = document.getElementById(`action-${t.id}`);
+      if (bar) updateActionMarkers(bar, t);
     }
   }
-  updateTaskEdgeLines();
+  updateActionEdgeLines();
 }
 
 // ── Lane layout ───────────────────────────────────
-// Assign each task to a lane (row within a section).
-// Tasks sorted by x-start; later-starting tasks that overlap get higher lanes (= lower on screen).
-function computeLanes(tasks) {
-  const sorted   = [...tasks].sort((a, b) => a.x - b.x);
-  const laneEnds = []; // laneEnds[i] = right edge of last task placed in lane i
+// Assign each action to a lane (row within a section).
+// Actions sorted by x-start; later-starting actions that overlap get higher lanes (= lower on screen).
+function computeLanes(actions) {
+  const sorted   = [...actions].sort((a, b) => a.x - b.x);
+  const laneEnds = []; // laneEnds[i] = right edge of last action placed in lane i
   const result   = new Map();
   for (const t of sorted) {
     let lane = laneEnds.findIndex(end => end <= t.x);
@@ -514,11 +519,11 @@ function computeLanes(tasks) {
   return result;
 }
 
-// Re-position all task bars in a section and resize the section row.
-// Pass skipId to leave one task untouched (while it's being dragged).
+// Re-position all action bars in a section and resize the section row.
+// Pass skipId to leave one action untouched (while it's being dragged).
 function layoutSection(sec, skipId = null) {
-  const lanes    = computeLanes(sec.tasks);
-  const numLanes = sec.tasks.length > 0 ? Math.max(...lanes.values()) + 1 : 1;
+  const lanes    = computeLanes(sec.actions);
+  const numLanes = sec.actions.length > 0 ? Math.max(...lanes.values()) + 1 : 1;
   const secH     = LANE_PAD * 2 + numLanes * LANE_H;
 
   // Resize row
@@ -527,9 +532,9 @@ function layoutSection(sec, skipId = null) {
              .forEach(el => { el.style.height = `${secH}px`; });
 
   // Reposition bars
-  for (const t of sec.tasks) {
+  for (const t of sec.actions) {
     if (t.id === skipId) continue;
-    const bar = document.getElementById(`task-${t.id}`);
+    const bar = document.getElementById(`action-${t.id}`);
     if (!bar) continue;
     const lane        = lanes.get(t.id) ?? 0;
     bar.style.top       = `${LANE_PAD + lane * LANE_H}px`;
@@ -580,8 +585,8 @@ function renderEvents() {
         // Move all section drop-lines for this event
         document.querySelectorAll(`.sec-drop-line[data-ev-id="${ev.id}"]`)
           .forEach(ln => { ln.style.left = `${nx}px`; });
-        // Update markers on all tasks (event position changed)
-        updateAllTaskMarkers();
+        // Update markers on all actions (event position changed)
+        updateAllActionMarkers();
       };
 
       const onUp = () => {
@@ -589,7 +594,7 @@ function renderEvents() {
         dot.removeEventListener('pointerup',   onUp);
         dot.removeEventListener('pointercancel', onUp);
         dot.classList.remove('snapping');
-        updateAllTaskMarkers();
+        updateAllActionMarkers();
         if (moved) saveData();
         if (!moved && li) li.focus(); // tap → focus the label input
       };
@@ -668,10 +673,10 @@ function renderSection(sec) {
   // Drop lines from existing events
   for (const ev of events) sc.appendChild(makeSecLine(ev));
 
-  // Existing tasks
-  for (const t of sec.tasks) appendTask(sc, sec, t);
+  // Existing actions
+  for (const t of sec.actions) appendAction(sc, sec, t);
 
-  // Single tap/click on empty area → add a task.
+  // Single tap/click on empty area → add a action.
   // Ignore if the pointer moved (scroll drag): track down position and
   // only fire when total travel is within TAP_MAX pixels.
   const TAP_MAX = 8;
@@ -692,7 +697,7 @@ function renderSection(sec) {
     tapDown = null;
     if (e.target !== sc && !e.target.classList.contains('sec-drop-line')) return;
     const rect = sc.getBoundingClientRect();
-    addTask(sec.id, e.clientX - rect.left);
+    addAction(sec.id, e.clientX - rect.left);
   });
   sc.addEventListener('pointercancel', () => { tapDown = null; });
 
@@ -704,12 +709,12 @@ function renderSection(sec) {
 // ── Fade shape & handles ──────────────────────────
 const FADE_MIN = 10; // minimum fade length (px)
 
-function updateTaskShape(bar, task) {
-  const fi = Math.max(0, Math.min(task.fadeIn,  task.w - Math.max(0, task.fadeOut)));
-  const fo = Math.max(0, Math.min(task.fadeOut, task.w - fi));
+function updateActionShape(bar, action) {
+  const fi = Math.max(0, Math.min(action.fadeIn,  action.w - Math.max(0, action.fadeOut)));
+  const fo = Math.max(0, Math.min(action.fadeOut, action.w - fi));
 
   // Remove any previous SVG shape
-  bar.querySelector('.task-shape-svg')?.remove();
+  bar.querySelector('.action-shape-svg')?.remove();
 
   if (fi === 0 && fo === 0) {
     // Plain (square) rectangle: restore CSS border/background
@@ -720,15 +725,15 @@ function updateTaskShape(bar, task) {
     bar.style.border       = '';
   } else {
     // Trapezoid: draw with SVG so the diagonal edges get a proper stroke
-    const w = task.w, h = TASK_H;
+    const w = action.w, h = ACTION_H;
     const NS  = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
-    svg.classList.add('task-shape-svg');
+    svg.classList.add('action-shape-svg');
     svg.setAttribute('width', w);
     svg.setAttribute('height', h);
 
     const poly = document.createElementNS(NS, 'polygon');
-    poly.classList.add('task-shape-poly');
+    poly.classList.add('action-shape-poly');
     poly.setAttribute('points', `${fi},0 ${w - fo},0 ${w},${h} 0,${h}`);
     svg.appendChild(poly);
     bar.insertBefore(svg, bar.firstChild);
@@ -743,18 +748,18 @@ function updateTaskShape(bar, task) {
 
   // Offset text to start at the slope's top edge, not behind it
   const HANDLE_W = 14;
-  const ti = bar.querySelector('.task-text');
+  const ti = bar.querySelector('.action-text');
   if (ti) {
-    ti.style.paddingLeft  = task.fadeIn  > HANDLE_W ? `${task.fadeIn  - HANDLE_W}px` : '';
-    ti.style.paddingRight = task.fadeOut > HANDLE_W ? `${task.fadeOut - HANDLE_W}px` : '';
+    ti.style.paddingLeft  = action.fadeIn  > HANDLE_W ? `${action.fadeIn  - HANDLE_W}px` : '';
+    ti.style.paddingRight = action.fadeOut > HANDLE_W ? `${action.fadeOut - HANDLE_W}px` : '';
   }
 }
 
-function setupFadeHandleDrag(handle, bar, sec, task, type) {
+function setupFadeHandleDrag(handle, bar, sec, action, type) {
   const delFn = () => {
-    if (type === 'in') task.fadeIn = 0; else task.fadeOut = 0;
-    updateTaskShape(bar, task);
-    updateFadeHandles(bar, sec, task);
+    if (type === 'in') action.fadeIn = 0; else action.fadeOut = 0;
+    updateActionShape(bar, action);
+    updateFadeHandles(bar, sec, action);
   };
   const delMenu = e => showCtx(e.clientX, e.clientY, [{ label: '削除', fn: delFn }]);
   handle.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); delMenu(e); });
@@ -765,7 +770,7 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
     e.preventDefault(); e.stopPropagation();
     handle.setPointerCapture(e.pointerId);
     const sx = e.clientX;
-    const initVal = type === 'in' ? task.fadeIn : task.fadeOut;
+    const initVal = type === 'in' ? action.fadeIn : action.fadeOut;
     let moved = false;
 
     const onMove = ev => {
@@ -774,26 +779,26 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
       moved = true;
       if (type === 'in') {
         // Absolute position of the fade-in dividing line
-        const rawAbs = task.x + initVal + dx;
-        const snapped = snapToAny(rawAbs, task.id);
+        const rawAbs = action.x + initVal + dx;
+        const snapped = snapToAny(rawAbs, action.id);
         const abs = snapped !== null ? snapped : rawAbs;
-        task.fadeIn = Math.max(0, Math.min(abs - task.x, task.w - Math.max(task.fadeOut, 0) - FADE_MIN));
+        action.fadeIn = Math.max(0, Math.min(abs - action.x, action.w - Math.max(action.fadeOut, 0) - FADE_MIN));
         if (snapped !== null) handle.classList.add('snapping');
         else                  handle.classList.remove('snapping');
-        handle.style.left = `${task.fadeIn}px`;
+        handle.style.left = `${action.fadeIn}px`;
       } else {
         // Absolute position of the fade-out dividing line
-        const rawAbs = task.x + task.w - initVal + dx;
-        const snapped = snapToAny(rawAbs, task.id);
+        const rawAbs = action.x + action.w - initVal + dx;
+        const snapped = snapToAny(rawAbs, action.id);
         const abs = snapped !== null ? snapped : rawAbs;
-        task.fadeOut = Math.max(0, Math.min(task.x + task.w - abs, task.w - Math.max(task.fadeIn, 0) - FADE_MIN));
+        action.fadeOut = Math.max(0, Math.min(action.x + action.w - abs, action.w - Math.max(action.fadeIn, 0) - FADE_MIN));
         if (snapped !== null) handle.classList.add('snapping');
         else                  handle.classList.remove('snapping');
-        handle.style.left = `${task.w - task.fadeOut}px`;
+        handle.style.left = `${action.w - action.fadeOut}px`;
       }
-      updateTaskShape(bar, task);
-      updateTaskMarkers(bar, task);
-      updateTaskEdgeLines();
+      updateActionShape(bar, action);
+      updateActionMarkers(bar, action);
+      updateActionEdgeLines();
     };
     const onUp = ev => {
       handle.removeEventListener('pointermove', onMove);
@@ -802,11 +807,11 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
       handle.classList.remove('snapping');
       if (!moved) { delMenu(ev); return; }
       // Auto-remove if dragged all the way to 0
-      if ((type === 'in' && task.fadeIn <= 0) || (type === 'out' && task.fadeOut <= 0)) {
+      if ((type === 'in' && action.fadeIn <= 0) || (type === 'out' && action.fadeOut <= 0)) {
         delFn();
       }
-      updateTaskMarkers(bar, task);
-      updateTaskEdgeLines();
+      updateActionMarkers(bar, action);
+      updateActionEdgeLines();
       saveData();
     };
     handle.addEventListener('pointermove', onMove);
@@ -815,36 +820,36 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
   });
 }
 
-function updateFadeHandles(bar, sec, task) {
+function updateFadeHandles(bar, sec, action) {
   bar.querySelectorAll('.fade-handle').forEach(el => el.remove());
-  if (task.fadeIn > 0) {
+  if (action.fadeIn > 0) {
     const h = document.createElement('div');
     h.className = 'fade-handle';
-    h.style.left = `${task.fadeIn}px`;
+    h.style.left = `${action.fadeIn}px`;
     bar.appendChild(h);
-    setupFadeHandleDrag(h, bar, sec, task, 'in');
+    setupFadeHandleDrag(h, bar, sec, action, 'in');
   }
-  if (task.fadeOut > 0) {
+  if (action.fadeOut > 0) {
     const h = document.createElement('div');
     h.className = 'fade-handle';
-    h.style.left = `${task.w - task.fadeOut}px`;
+    h.style.left = `${action.w - action.fadeOut}px`;
     bar.appendChild(h);
-    setupFadeHandleDrag(h, bar, sec, task, 'out');
+    setupFadeHandleDrag(h, bar, sec, action, 'out');
   }
 }
 
-// ── Task element ──────────────────────────────────
-function appendTask(container, sec, task) {
+// ── Action element ──────────────────────────────────
+function appendAction(container, sec, action) {
   const bar = document.createElement('div');
-  bar.className = 'task-bar';
-  bar.id = `task-${task.id}`;
-  bar.style.left  = `${task.x}px`;
-  bar.style.width = `${task.w}px`;
+  bar.className = 'action-bar';
+  bar.id = `action-${action.id}`;
+  bar.style.left  = `${action.x}px`;
+  bar.style.width = `${action.w}px`;
 
   const lh = document.createElement('div'); lh.className = 't-handle tl'; lh.innerHTML = '⋮';
   const ti = document.createElement('input');
-  ti.type = 'text'; ti.className = 'task-text'; ti.value = task.text; ti.placeholder = 'アクション名';
-  ti.addEventListener('input', e => { task.text = e.target.value; scheduleSave(); });
+  ti.type = 'text'; ti.className = 'action-text'; ti.value = action.text; ti.placeholder = 'アクション名';
+  ti.addEventListener('input', e => { action.text = e.target.value; scheduleSave(); });
   const rh = document.createElement('div'); rh.className = 't-handle tr'; rh.innerHTML = '⋮';
 
   bar.appendChild(lh); bar.appendChild(ti); bar.appendChild(rh);
@@ -853,19 +858,19 @@ function appendTask(container, sec, task) {
   bar.addEventListener('contextmenu', e => {
     if (e.target === lh || e.target === rh || e.target.classList.contains('fade-handle')) return;
     e.preventDefault(); e.stopPropagation();
-    showCtx(e.clientX, e.clientY, [{ label: 'アクションを削除', fn: () => deleteTask(sec.id, task.id) }]);
+    showCtx(e.clientX, e.clientY, [{ label: 'アクションを削除', fn: () => deleteAction(sec.id, action.id) }]);
   });
 
-  updateTaskShape(bar, task);
-  updateFadeHandles(bar, sec, task);
-  setupDrag(bar, sec, task, lh, rh);
+  updateActionShape(bar, action);
+  updateFadeHandles(bar, sec, action);
+  setupDrag(bar, sec, action, lh, rh);
   return bar;
 }
 
 // ── Drag / resize (Pointer Events: mouse + touch + pen) ──
 const DRAG_THRESH = 6; // px before a press becomes a drag
 
-function setupDrag(bar, sec, task, lh, rh) {
+function setupDrag(bar, sec, action, lh, rh) {
   bar.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     if (e.target.classList.contains('fade-handle')) return; // handled by fade drag
@@ -873,8 +878,8 @@ function setupDrag(bar, sec, task, lh, rh) {
     const pressedLH  = e.target === lh;
     const pressedRH  = e.target === rh;
     const mode       = pressedLH ? 'l' : pressedRH ? 'r' : 'move';
-    const input      = bar.querySelector('.task-text');
-    const sx = e.clientX, st = { x: task.x, w: task.w };
+    const input      = bar.querySelector('.action-text');
+    const sx = e.clientX, st = { x: action.x, w: action.w };
     let started   = false; // true only after actual movement; handles tap detection for lh/rh
     let menuShown = false;
     let lpTimer   = null;
@@ -889,7 +894,7 @@ function setupDrag(bar, sec, task, lh, rh) {
         lpTimer = null; menuShown = true;
         try { bar.releasePointerCapture(e.pointerId); } catch (_) {}
         showCtx(e.clientX, e.clientY,
-          [{ label: 'アクションを削除', fn: () => deleteTask(sec.id, task.id) }]);
+          [{ label: 'アクションを削除', fn: () => deleteAction(sec.id, action.id) }]);
       }, 500);
     }
 
@@ -907,32 +912,32 @@ function setupDrag(bar, sec, task, lh, rh) {
 
       if (mode === 'move') {
         const raw = Math.max(0, st.x + dx);
-        const snappedX = snapMoveX(raw, task);
-        if (snappedX !== null) { task.x = Math.max(0, snappedX); bar.classList.add('snapping'); }
-        else                   { task.x = raw;                   bar.classList.remove('snapping'); }
-        bar.style.left = `${task.x}px`;
+        const snappedX = snapMoveX(raw, action);
+        if (snappedX !== null) { action.x = Math.max(0, snappedX); bar.classList.add('snapping'); }
+        else                   { action.x = raw;                   bar.classList.remove('snapping'); }
+        bar.style.left = `${action.x}px`;
       } else if (mode === 'r') {
         let w = Math.max(50, st.w + dx);
-        const sr = snapToAny(st.x + w, task.id);
+        const sr = snapToAny(st.x + w, action.id);
         if (sr !== null) { w = Math.max(50, sr - st.x); bar.classList.add('snapping'); }
         else             { bar.classList.remove('snapping'); }
-        task.w = w; bar.style.width = `${w}px`;
-        updateTaskShape(bar, task);   // shape adjusts to new width
-        updateFadeHandles(bar, sec, task); // keep fade dots glued to the slope
+        action.w = w; bar.style.width = `${w}px`;
+        updateActionShape(bar, action);   // shape adjusts to new width
+        updateFadeHandles(bar, sec, action); // keep fade dots glued to the slope
       } else { // 'l'
         let nw = Math.max(50, st.w - dx);
         let nx = Math.max(0, st.x + st.w - nw);
-        const sl = snapToAny(nx, task.id);
+        const sl = snapToAny(nx, action.id);
         if (sl !== null) { nx = sl; nw = st.x + st.w - nx; bar.classList.add('snapping'); }
         else             { bar.classList.remove('snapping'); }
-        task.x = nx; task.w = nw;
+        action.x = nx; action.w = nw;
         bar.style.left = `${nx}px`; bar.style.width = `${nw}px`;
-        updateTaskShape(bar, task);
-        updateFadeHandles(bar, sec, task); // keep fade dots glued to the slope
+        updateActionShape(bar, action);
+        updateFadeHandles(bar, sec, action); // keep fade dots glued to the slope
       }
-      updateTaskMarkers(bar, task);
-      updateTaskEdgeLines();
-      layoutSection(sec, task.id);
+      updateActionMarkers(bar, action);
+      updateActionEdgeLines();
+      layoutSection(sec, action.id);
     };
 
     const onUp = ev => {
@@ -943,23 +948,23 @@ function setupDrag(bar, sec, task, lh, rh) {
       bar.removeEventListener('pointercancel', onUp);
       bar.classList.remove('dragging', 'snapping');
       layoutSection(sec);
-      updateTaskShape(bar, task);
-      updateFadeHandles(bar, sec, task); // reposition after resize
-      updateTaskMarkers(bar, task);
-      updateTaskEdgeLines();
+      updateActionShape(bar, action);
+      updateFadeHandles(bar, sec, action); // reposition after resize
+      updateActionMarkers(bar, action);
+      updateActionEdgeLines();
       if (started) saveData(); // persist position/size changes
 
       if (!started && !menuShown) {
         // Tap on lh/rh → fade menu (if no fade yet)
-        if (pressedLH && task.fadeIn === 0) {
+        if (pressedLH && action.fadeIn === 0) {
           showCtx(ev.clientX, ev.clientY, [{
             label: 'フェードイン追加',
-            fn: () => { task.fadeIn = Math.round(task.w * 0.2); updateTaskShape(bar, task); updateFadeHandles(bar, sec, task); }
+            fn: () => { action.fadeIn = Math.round(action.w * 0.2); updateActionShape(bar, action); updateFadeHandles(bar, sec, action); }
           }]);
-        } else if (pressedRH && task.fadeOut === 0) {
+        } else if (pressedRH && action.fadeOut === 0) {
           showCtx(ev.clientX, ev.clientY, [{
             label: 'フェードアウト追加',
-            fn: () => { task.fadeOut = Math.round(task.w * 0.2); updateTaskShape(bar, task); updateFadeHandles(bar, sec, task); }
+            fn: () => { action.fadeOut = Math.round(action.w * 0.2); updateActionShape(bar, action); updateFadeHandles(bar, sec, action); }
           }]);
         } else if (!pressedLH && !pressedRH && input) {
           input.focus();
@@ -984,7 +989,7 @@ function addEvent(x) {
     const sc = document.getElementById(`sc-${sec.id}`);
     if (sc) sc.appendChild(makeSecLine(ev));
   }
-  updateAllTaskMarkers();
+  updateAllActionMarkers();
   requestAnimationFrame(() => {
     const inp = document.querySelector(`[data-ev="${ev.id}"]`);
     if (inp) inp.focus();
@@ -1001,11 +1006,11 @@ function deleteEvent(id) {
     const sc = document.getElementById(`sc-${sec.id}`);
     if (sc) refreshSecDropLines(sc);
   }
-  updateAllTaskMarkers();
+  updateAllActionMarkers();
 }
 
 function addSection() {
-  const sec = { id: uid(), name: '', tasks: [] };
+  const sec = { id: uid(), name: '', actions: [] };
   sections.push(sec);
   saveData();
   const ni = renderSection(sec);
@@ -1015,9 +1020,9 @@ function addSection() {
 function requestDeleteSection(secId) {
   const sec = sections.find(s => s.id === secId);
   if (!sec) return;
-  if (sec.tasks.length > 0) {
+  if (sec.actions.length > 0) {
     const label = sec.name ? `「${sec.name}」` : 'このセクション';
-    showModal(`${label}には ${sec.tasks.length} 個のアクションがあります。\nセクションごと削除しますか？`,
+    showModal(`${label}には ${sec.actions.length} 個のアクションがあります。\nセクションごと削除しますか？`,
       () => deleteSection(secId));
   } else {
     deleteSection(secId);
@@ -1031,45 +1036,45 @@ function deleteSection(secId) {
   saveData();
   const row = document.getElementById(`sec-row-${secId}`);
   if (row) row.remove();
-  updateAllTaskMarkers(); // task-edge lines may reference deleted tasks
+  updateAllActionMarkers(); // action-edge lines may reference deleted actions
 }
 
-function addTask(secId, clickX) {
+function addAction(secId, clickX) {
   const sec = sections.find(s => s.id === secId);
   if (!sec) return;
   let x;
   if (clickX != null) {
     // Center the new bar on the double-click point, then snap edges to events
-    x = Math.max(0, clickX - TASK_W_DEF / 2);
+    x = Math.max(0, clickX - ACTION_W_DEF / 2);
     const sl = snapToAny(x);
-    const sr = snapToAny(x + TASK_W_DEF);
+    const sr = snapToAny(x + ACTION_W_DEF);
     if (sl !== null) x = sl;
-    else if (sr !== null) x = sr - TASK_W_DEF;
+    else if (sr !== null) x = sr - ACTION_W_DEF;
   } else {
-    const last = sec.tasks[sec.tasks.length - 1];
+    const last = sec.actions[sec.actions.length - 1];
     x = last ? last.x + last.w + 12 : 20;
   }
-  const task = { id: uid(), x, w: TASK_W_DEF, text: '', fadeIn: 0, fadeOut: 0 };
-  sec.tasks.push(task);
+  const action = { id: uid(), x, w: ACTION_W_DEF, text: '', fadeIn: 0, fadeOut: 0 };
+  sec.actions.push(action);
   saveData();
   const sc = document.getElementById(`sc-${secId}`);
   if (!sc) return;
-  const bar = appendTask(sc, sec, task);
+  const bar = appendAction(sc, sec, action);
   layoutSection(sec);
-  updateTaskMarkers(bar, task);
+  updateActionMarkers(bar, action);
   requestAnimationFrame(() => {
-    const inp = document.querySelector(`#task-${task.id} input`);
+    const inp = document.querySelector(`#action-${action.id} input`);
     if (inp) inp.focus();
   });
 }
 
-function deleteTask(secId, taskId) {
+function deleteAction(secId, actionId) {
   const sec = sections.find(s => s.id === secId);
   if (!sec) return;
-  const i = sec.tasks.findIndex(t => t.id === taskId);
-  if (i >= 0) sec.tasks.splice(i, 1);
+  const i = sec.actions.findIndex(t => t.id === actionId);
+  if (i >= 0) sec.actions.splice(i, 1);
   saveData();
-  const el = document.getElementById(`task-${taskId}`);
+  const el = document.getElementById(`action-${actionId}`);
   if (el) el.remove();
   layoutSection(sec);
 }
@@ -1087,7 +1092,7 @@ if (loadData()) {
   // Restore saved state
   renderEvents();
   for (const sec of sections) { renderSection(sec); layoutSection(sec); }
-  updateAllTaskMarkers();
+  updateAllActionMarkers();
 }
 // Fresh start: just the event timeline, no sections.
 </script>
