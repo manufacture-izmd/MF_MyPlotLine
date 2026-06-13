@@ -200,7 +200,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 16;
+const BUILD = 17;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -743,7 +743,8 @@ function setupDrag(bar, sec, task, lh, rh) {
         if (sr !== null) { w = Math.max(50, sr - st.x); bar.classList.add('snapping'); }
         else             { bar.classList.remove('snapping'); }
         task.w = w; bar.style.width = `${w}px`;
-        updateTaskShape(bar, task); // shape adjusts to new width
+        updateTaskShape(bar, task);   // shape adjusts to new width
+        updateFadeHandles(bar, sec, task); // keep fade dots glued to the slope
       } else { // 'l'
         let nw = Math.max(50, st.w - dx);
         let nx = Math.max(0, st.x + st.w - nw);
@@ -753,6 +754,7 @@ function setupDrag(bar, sec, task, lh, rh) {
         task.x = nx; task.w = nw;
         bar.style.left = `${nx}px`; bar.style.width = `${nw}px`;
         updateTaskShape(bar, task);
+        updateFadeHandles(bar, sec, task); // keep fade dots glued to the slope
       }
       updateTaskMarkers(bar, task);
       layoutSection(sec, task.id);
