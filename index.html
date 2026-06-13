@@ -127,6 +127,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   transition: box-shadow .1s;
 }
 .fade-handle:hover { box-shadow: 0 0 0 5px var(--accent-glow); }
+.fade-handle.snapping { box-shadow: 0 0 0 6px var(--accent-glow), 0 0 10px var(--accent); }
 
 /* ── Edge-alignment markers ── */
 .task-mark {
@@ -199,7 +200,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 14;
+const BUILD = 15;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -262,23 +263,25 @@ function attachLongPress(el, handler) {
 }
 
 // ── Snap ──────────────────────────────────────────
-function snapTo(x, excludeId = null) {
+// Unified: snaps x to events, task edges, and task fade positions.
+// excludeTaskId: skip this task's own snap points (use when moving/resizing that task).
+// excludeEvId:   skip this event's own position (use when dragging that event).
+function snapToAny(x, excludeTaskId = null, excludeEvId = null) {
   let best = null, d = SNAP_DIST;
   for (const ev of events) {
-    if (ev.id === excludeId) continue;
-    const dd = Math.abs(ev.x - x); if (dd < d) { d = dd; best = ev.x; }
+    if (ev.id === excludeEvId) continue;
+    const dd = Math.abs(ev.x - x);
+    if (dd < d) { d = dd; best = ev.x; }
   }
-  return best; // null if no snap
-}
-
-// Snap x to any task's left or right edge across all sections
-function snapToTaskEdge(x) {
-  let best = null, d = SNAP_DIST;
   for (const sec of sections) {
     for (const t of sec.tasks) {
-      for (const edge of [t.x, t.x + t.w]) {
-        const dd = Math.abs(edge - x);
-        if (dd < d) { d = dd; best = edge; }
+      if (t.id === excludeTaskId) continue;
+      const pts = [t.x, t.x + t.w];
+      if (t.fadeIn  > 0) pts.push(t.x + t.fadeIn);
+      if (t.fadeOut > 0) pts.push(t.x + t.w - t.fadeOut);
+      for (const pt of pts) {
+        const dd = Math.abs(pt - x);
+        if (dd < d) { d = dd; best = pt; }
       }
     }
   }
@@ -388,7 +391,7 @@ function renderEvents() {
         if (!moved && Math.abs(dx) < 4) return;
         moved = true;
         const raw = Math.max(0, ox + dx);
-        const snapped = snapToTaskEdge(raw);
+        const snapped = snapToAny(raw, null, ev.id);
         const nx = snapped !== null ? snapped : raw;
         ev.x = nx;
         // Snap visual feedback on the dot
@@ -584,10 +587,22 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
       if (!moved && Math.abs(dx) < 3) return;
       moved = true;
       if (type === 'in') {
-        task.fadeIn = Math.max(0, Math.min(initVal + dx, task.w - Math.max(task.fadeOut, 0) - FADE_MIN));
+        // Absolute position of the fade-in dividing line
+        const rawAbs = task.x + initVal + dx;
+        const snapped = snapToAny(rawAbs, task.id);
+        const abs = snapped !== null ? snapped : rawAbs;
+        task.fadeIn = Math.max(0, Math.min(abs - task.x, task.w - Math.max(task.fadeOut, 0) - FADE_MIN));
+        if (snapped !== null) handle.classList.add('snapping');
+        else                  handle.classList.remove('snapping');
         handle.style.left = `${task.fadeIn}px`;
       } else {
-        task.fadeOut = Math.max(0, Math.min(initVal - dx, task.w - Math.max(task.fadeIn, 0) - FADE_MIN));
+        // Absolute position of the fade-out dividing line
+        const rawAbs = task.x + task.w - initVal + dx;
+        const snapped = snapToAny(rawAbs, task.id);
+        const abs = snapped !== null ? snapped : rawAbs;
+        task.fadeOut = Math.max(0, Math.min(task.x + task.w - abs, task.w - Math.max(task.fadeIn, 0) - FADE_MIN));
+        if (snapped !== null) handle.classList.add('snapping');
+        else                  handle.classList.remove('snapping');
         handle.style.left = `${task.w - task.fadeOut}px`;
       }
       updateTaskShape(bar, task);
@@ -596,6 +611,7 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup',   onUp);
       handle.removeEventListener('pointercancel', onUp);
+      handle.classList.remove('snapping');
       if (!moved) { delMenu(ev); return; }
       // Auto-remove if dragged all the way to 0
       if ((type === 'in' && task.fadeIn <= 0) || (type === 'out' && task.fadeOut <= 0)) {
@@ -700,14 +716,14 @@ function setupDrag(bar, sec, task, lh, rh) {
 
       if (mode === 'move') {
         const raw = Math.max(0, st.x + dx);
-        const sl = snapTo(raw), sr = snapTo(raw + task.w);
+        const sl = snapToAny(raw, task.id), sr = snapToAny(raw + task.w, task.id);
         if (sl !== null)      { task.x = sl;           bar.classList.add('snapping'); }
         else if (sr !== null) { task.x = sr - task.w;  bar.classList.add('snapping'); }
         else                  { task.x = raw;          bar.classList.remove('snapping'); }
         bar.style.left = `${task.x}px`;
       } else if (mode === 'r') {
         let w = Math.max(50, st.w + dx);
-        const sr = snapTo(st.x + w);
+        const sr = snapToAny(st.x + w, task.id);
         if (sr !== null) { w = Math.max(50, sr - st.x); bar.classList.add('snapping'); }
         else             { bar.classList.remove('snapping'); }
         task.w = w; bar.style.width = `${w}px`;
@@ -715,7 +731,7 @@ function setupDrag(bar, sec, task, lh, rh) {
       } else { // 'l'
         let nw = Math.max(50, st.w - dx);
         let nx = Math.max(0, st.x + st.w - nw);
-        const sl = snapTo(nx);
+        const sl = snapToAny(nx, task.id);
         if (sl !== null) { nx = sl; nw = st.x + st.w - nx; bar.classList.add('snapping'); }
         else             { bar.classList.remove('snapping'); }
         task.x = nx; task.w = nw;
@@ -805,8 +821,8 @@ function addTask(secId, clickX) {
   if (clickX != null) {
     // Center the new bar on the double-click point, then snap edges to events
     x = Math.max(0, clickX - TASK_W_DEF / 2);
-    const sl = snapTo(x);
-    const sr = snapTo(x + TASK_W_DEF);
+    const sl = snapToAny(x);
+    const sr = snapToAny(x + TASK_W_DEF);
     if (sl !== null) x = sl;
     else if (sr !== null) x = sr - TASK_W_DEF;
   } else {
