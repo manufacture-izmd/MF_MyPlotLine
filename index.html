@@ -104,7 +104,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .task-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 
 /* ── Trapezoid SVG shape (replaces CSS border when fade is active) ── */
-.task-shape-svg  { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.task-shape-svg  { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: -1; }
 .task-shape-poly { fill: var(--task-bg); stroke: var(--task-bd); stroke-width: 1.5px; }
 .task-bar.snapping .task-shape-poly { stroke: var(--accent); }
 
@@ -192,7 +192,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 12;
+const BUILD = 13;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -541,6 +541,14 @@ function updateTaskShape(bar, task) {
     bar.style.borderRadius = '0';
     bar.style.background   = 'transparent';
     bar.style.border       = 'none';
+  }
+
+  // Offset text to start at the slope's top edge, not behind it
+  const HANDLE_W = 14;
+  const ti = bar.querySelector('.task-text');
+  if (ti) {
+    ti.style.paddingLeft  = task.fadeIn  > HANDLE_W ? `${task.fadeIn  - HANDLE_W}px` : '';
+    ti.style.paddingRight = task.fadeOut > HANDLE_W ? `${task.fadeOut - HANDLE_W}px` : '';
   }
 }
 
