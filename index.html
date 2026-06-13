@@ -206,7 +206,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   <div id="scroll-wrap">
     <!-- Timeline row -->
     <div class="row" id="timeline-row">
-      <div class="row-label">Timeline</div>
+      <div class="row-label">イベント</div>
       <div class="row-content" id="tl-content">
         <div id="timeline-line"></div>
       </div>
@@ -238,7 +238,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 23;
+const BUILD = 24;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -843,7 +843,7 @@ function appendTask(container, sec, task) {
 
   const lh = document.createElement('div'); lh.className = 't-handle tl'; lh.innerHTML = '⋮';
   const ti = document.createElement('input');
-  ti.type = 'text'; ti.className = 'task-text'; ti.value = task.text; ti.placeholder = 'タスク名';
+  ti.type = 'text'; ti.className = 'task-text'; ti.value = task.text; ti.placeholder = 'アクション名';
   ti.addEventListener('input', e => { task.text = e.target.value; scheduleSave(); });
   const rh = document.createElement('div'); rh.className = 't-handle tr'; rh.innerHTML = '⋮';
 
@@ -853,7 +853,7 @@ function appendTask(container, sec, task) {
   bar.addEventListener('contextmenu', e => {
     if (e.target === lh || e.target === rh || e.target.classList.contains('fade-handle')) return;
     e.preventDefault(); e.stopPropagation();
-    showCtx(e.clientX, e.clientY, [{ label: 'タスクを削除', fn: () => deleteTask(sec.id, task.id) }]);
+    showCtx(e.clientX, e.clientY, [{ label: 'アクションを削除', fn: () => deleteTask(sec.id, task.id) }]);
   });
 
   updateTaskShape(bar, task);
@@ -889,7 +889,7 @@ function setupDrag(bar, sec, task, lh, rh) {
         lpTimer = null; menuShown = true;
         try { bar.releasePointerCapture(e.pointerId); } catch (_) {}
         showCtx(e.clientX, e.clientY,
-          [{ label: 'タスクを削除', fn: () => deleteTask(sec.id, task.id) }]);
+          [{ label: 'アクションを削除', fn: () => deleteTask(sec.id, task.id) }]);
       }, 500);
     }
 
@@ -1017,7 +1017,7 @@ function requestDeleteSection(secId) {
   if (!sec) return;
   if (sec.tasks.length > 0) {
     const label = sec.name ? `「${sec.name}」` : 'このセクション';
-    showModal(`${label}には ${sec.tasks.length} 個のタスクがあります。\nセクションごと削除しますか？`,
+    showModal(`${label}には ${sec.tasks.length} 個のアクションがあります。\nセクションごと削除しますか？`,
       () => deleteSection(secId));
   } else {
     deleteSection(secId);
@@ -1088,9 +1088,8 @@ if (loadData()) {
   renderEvents();
   for (const sec of sections) { renderSection(sec); layoutSection(sec); }
   updateAllTaskMarkers();
-} else {
-  addSection(); // fresh start with one empty section
 }
+// Fresh start: just the event timeline, no sections.
 </script>
 </body>
 </html>
