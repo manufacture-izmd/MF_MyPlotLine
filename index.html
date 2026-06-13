@@ -200,7 +200,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 15;
+const BUILD = 16;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -286,6 +286,23 @@ function snapToAny(x, excludeTaskId = null, excludeEvId = null) {
     }
   }
   return best; // null if no snap
+}
+
+// When moving a whole task, every reference point on it (left edge, right edge,
+// fade-in line, fade-out line) should be able to snap. Try all of them and pick
+// the closest snap, returning the resulting task left-edge x (or null for none).
+function snapMoveX(rawX, task) {
+  const offsets = [0, task.w];               // left edge, right edge
+  if (task.fadeIn  > 0) offsets.push(task.fadeIn);          // fade-in line
+  if (task.fadeOut > 0) offsets.push(task.w - task.fadeOut); // fade-out line
+  let bestX = null, bestD = SNAP_DIST;
+  for (const off of offsets) {
+    const snapped = snapToAny(rawX + off, task.id);
+    if (snapped === null) continue;
+    const d = Math.abs(snapped - (rawX + off));
+    if (d < bestD) { bestD = d; bestX = snapped - off; }
+  }
+  return bestX; // null if no snap
 }
 
 // ── Edge-alignment markers ─────────────────────────
@@ -716,10 +733,9 @@ function setupDrag(bar, sec, task, lh, rh) {
 
       if (mode === 'move') {
         const raw = Math.max(0, st.x + dx);
-        const sl = snapToAny(raw, task.id), sr = snapToAny(raw + task.w, task.id);
-        if (sl !== null)      { task.x = sl;           bar.classList.add('snapping'); }
-        else if (sr !== null) { task.x = sr - task.w;  bar.classList.add('snapping'); }
-        else                  { task.x = raw;          bar.classList.remove('snapping'); }
+        const snappedX = snapMoveX(raw, task);
+        if (snappedX !== null) { task.x = Math.max(0, snappedX); bar.classList.add('snapping'); }
+        else                   { task.x = raw;                   bar.classList.remove('snapping'); }
         bar.style.left = `${task.x}px`;
       } else if (mode === 'r') {
         let w = Math.max(50, st.w + dx);
