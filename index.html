@@ -175,9 +175,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 8;
+const BUILD = 9;
 const SNAP_DIST   = 20;
 const TASK_W_DEF  = 180;
+const TASK_H      = 36;   // task bar height (px)
+const LANE_H      = 42;   // height per lane  (task + 6px gap)
+const LANE_PAD    = 14;   // section top/bottom padding
 
 let _id = 1;
 const uid = () => _id++;
@@ -288,6 +291,49 @@ function updateAllTaskMarkers() {
       if (bar) updateTaskMarkers(bar, t);
     }
   }
+}
+
+// ── Lane layout ───────────────────────────────────
+// Assign each task to a lane (row within a section).
+// Tasks sorted by x-start; later-starting tasks that overlap get higher lanes (= lower on screen).
+function computeLanes(tasks) {
+  const sorted   = [...tasks].sort((a, b) => a.x - b.x);
+  const laneEnds = []; // laneEnds[i] = right edge of last task placed in lane i
+  const result   = new Map();
+  for (const t of sorted) {
+    let lane = laneEnds.findIndex(end => end <= t.x);
+    if (lane === -1) lane = laneEnds.length; // need a new lane
+    laneEnds[lane] = t.x + t.w;
+    result.set(t.id, lane);
+  }
+  return result;
+}
+
+// Re-position all task bars in a section and resize the section row.
+// Pass skipId to leave one task untouched (while it's being dragged).
+function layoutSection(sec, skipId = null) {
+  const lanes    = computeLanes(sec.tasks);
+  const numLanes = sec.tasks.length > 0 ? Math.max(...lanes.values()) + 1 : 1;
+  const secH     = LANE_PAD * 2 + numLanes * LANE_H;
+
+  // Resize row
+  const row = document.getElementById(`sec-row-${sec.id}`);
+  if (row) row.querySelectorAll('.row-label, .row-content')
+             .forEach(el => { el.style.height = `${secH}px`; });
+
+  // Reposition bars
+  for (const t of sec.tasks) {
+    if (t.id === skipId) continue;
+    const bar = document.getElementById(`task-${t.id}`);
+    if (!bar) continue;
+    const lane        = lanes.get(t.id) ?? 0;
+    bar.style.top       = `${LANE_PAD + lane * LANE_H}px`;
+    bar.style.transform = 'none';
+  }
+}
+
+function layoutAllSections() {
+  for (const sec of sections) layoutSection(sec);
 }
 
 // ── Render events ─────────────────────────────────
@@ -529,6 +575,7 @@ function setupDrag(bar, sec, task, lh, rh) {
         bar.style.left = `${nx}px`; bar.style.width = `${nw}px`;
       }
       updateTaskMarkers(bar, task); // live marker update while dragging
+      layoutSection(sec, task.id);  // re-flow other tasks in real-time (skip dragged)
     };
 
     const onUp = ev => {
@@ -538,6 +585,7 @@ function setupDrag(bar, sec, task, lh, rh) {
       bar.removeEventListener('pointerup', onUp);
       bar.removeEventListener('pointercancel', onUp);
       bar.classList.remove('dragging', 'snapping');
+      layoutSection(sec);           // final layout including released task
       updateTaskMarkers(bar, task);
       // A press without movement (and no menu) is a tap → edit the text
       if (!started && !menuShown && input) input.focus();
@@ -605,6 +653,7 @@ function addTask(secId, clickX) {
   const sc = document.getElementById(`sc-${secId}`);
   if (!sc) return;
   const bar = appendTask(sc, sec, task);
+  layoutSection(sec);
   updateTaskMarkers(bar, task);
   requestAnimationFrame(() => {
     const inp = document.querySelector(`#task-${task.id} input`);
@@ -619,6 +668,7 @@ function deleteTask(secId, taskId) {
   if (i >= 0) sec.tasks.splice(i, 1);
   const el = document.getElementById(`task-${taskId}`);
   if (el) el.remove();
+  layoutSection(sec);
 }
 
 // ── Timeline click ────────────────────────────────
