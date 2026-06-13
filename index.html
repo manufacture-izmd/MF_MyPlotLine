@@ -103,6 +103,18 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .task-bar.dragging { cursor: grabbing; opacity: .88; z-index: 50; }
 .task-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 
+/* ── Fade handles ── */
+.fade-handle {
+  position: absolute; top: 0; width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; border: 2px solid var(--accent);
+  transform: translate(-50%, -50%);
+  cursor: ew-resize; z-index: 25; touch-action: none;
+  -webkit-user-select: none; user-select: none;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+  transition: box-shadow .1s;
+}
+.fade-handle:hover { box-shadow: 0 0 0 5px var(--accent-glow); }
+
 /* ── Edge-alignment markers ── */
 .task-mark {
   position: absolute; top: -15px; font-size: 12px; line-height: 1;
@@ -175,7 +187,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 9;
+const BUILD = 10;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -488,6 +500,89 @@ function renderSection(sec) {
   return ni;
 }
 
+// ── Fade shape & handles ──────────────────────────
+const FADE_MIN = 10; // minimum fade length (px)
+
+function updateTaskShape(bar, task) {
+  const fi = Math.max(0, Math.min(task.fadeIn,  task.w - Math.max(0, task.fadeOut)));
+  const fo = Math.max(0, Math.min(task.fadeOut, task.w - fi));
+  if (fi === 0 && fo === 0) {
+    bar.style.clipPath    = '';
+    bar.style.borderRadius = '6px';
+  } else {
+    // Trapezoid: top-left at (fi,0), top-right at (w-fo,0), bottom-right at (w,h), bottom-left at (0,h)
+    const fiP = (fi / task.w * 100).toFixed(2);
+    const foP = (fo / task.w * 100).toFixed(2);
+    bar.style.clipPath    = `polygon(${fiP}% 0%, ${100 - foP}% 0%, 100% 100%, 0% 100%)`;
+    bar.style.borderRadius = '0';
+  }
+}
+
+function setupFadeHandleDrag(handle, bar, sec, task, type) {
+  const delFn = () => {
+    if (type === 'in') task.fadeIn = 0; else task.fadeOut = 0;
+    updateTaskShape(bar, task);
+    updateFadeHandles(bar, sec, task);
+  };
+  const delMenu = e => showCtx(e.clientX, e.clientY, [{ label: '削除', fn: delFn }]);
+  handle.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); delMenu(e); });
+  attachLongPress(handle, delMenu);
+
+  handle.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation();
+    handle.setPointerCapture(e.pointerId);
+    const sx = e.clientX;
+    const initVal = type === 'in' ? task.fadeIn : task.fadeOut;
+    let moved = false;
+
+    const onMove = ev => {
+      const dx = ev.clientX - sx;
+      if (!moved && Math.abs(dx) < 3) return;
+      moved = true;
+      if (type === 'in') {
+        task.fadeIn = Math.max(0, Math.min(initVal + dx, task.w - Math.max(task.fadeOut, 0) - FADE_MIN));
+        handle.style.left = `${task.fadeIn}px`;
+      } else {
+        task.fadeOut = Math.max(0, Math.min(initVal - dx, task.w - Math.max(task.fadeIn, 0) - FADE_MIN));
+        handle.style.left = `${task.w - task.fadeOut}px`;
+      }
+      updateTaskShape(bar, task);
+    };
+    const onUp = ev => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup',   onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      if (!moved) { delMenu(ev); return; }
+      // Auto-remove if dragged all the way to 0
+      if ((type === 'in' && task.fadeIn <= 0) || (type === 'out' && task.fadeOut <= 0)) {
+        delFn();
+      }
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup',   onUp);
+    handle.addEventListener('pointercancel', onUp);
+  });
+}
+
+function updateFadeHandles(bar, sec, task) {
+  bar.querySelectorAll('.fade-handle').forEach(el => el.remove());
+  if (task.fadeIn > 0) {
+    const h = document.createElement('div');
+    h.className = 'fade-handle';
+    h.style.left = `${task.fadeIn}px`;
+    bar.appendChild(h);
+    setupFadeHandleDrag(h, bar, sec, task, 'in');
+  }
+  if (task.fadeOut > 0) {
+    const h = document.createElement('div');
+    h.className = 'fade-handle';
+    h.style.left = `${task.w - task.fadeOut}px`;
+    bar.appendChild(h);
+    setupFadeHandleDrag(h, bar, sec, task, 'out');
+  }
+}
+
 // ── Task element ──────────────────────────────────
 function appendTask(container, sec, task) {
   const bar = document.createElement('div');
@@ -506,10 +601,13 @@ function appendTask(container, sec, task) {
   container.appendChild(bar);
 
   bar.addEventListener('contextmenu', e => {
+    if (e.target === lh || e.target === rh || e.target.classList.contains('fade-handle')) return;
     e.preventDefault(); e.stopPropagation();
     showCtx(e.clientX, e.clientY, [{ label: 'タスクを削除', fn: () => deleteTask(sec.id, task.id) }]);
   });
 
+  updateTaskShape(bar, task);
+  updateFadeHandles(bar, sec, task);
   setupDrag(bar, sec, task, lh, rh);
   return bar;
 }
@@ -519,20 +617,23 @@ const DRAG_THRESH = 6; // px before a press becomes a drag
 
 function setupDrag(bar, sec, task, lh, rh) {
   bar.addEventListener('pointerdown', e => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return; // left button only
-    const isHandle = (e.target === lh || e.target === rh);
-    const mode  = e.target === lh ? 'l' : e.target === rh ? 'r' : 'move';
-    const input = bar.querySelector('.task-text');
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.classList.contains('fade-handle')) return; // handled by fade drag
+    const isHandle   = (e.target === lh || e.target === rh);
+    const pressedLH  = e.target === lh;
+    const pressedRH  = e.target === rh;
+    const mode       = pressedLH ? 'l' : pressedRH ? 'r' : 'move';
+    const input      = bar.querySelector('.task-text');
     const sx = e.clientX, st = { x: task.x, w: task.w };
-    let started   = isHandle;   // handles begin dragging immediately
+    let started   = isHandle;
     let menuShown = false;
     let lpTimer   = null;
 
     bar.setPointerCapture(e.pointerId);
-    e.preventDefault(); // prevent text-selection and callout on long-press (all pointer types)
+    e.preventDefault();
     if (isHandle) bar.classList.add('dragging');
 
-    // Touch long-press on the body → delete menu
+    // Touch long-press on body → delete menu
     if (e.pointerType === 'touch' && !isHandle) {
       lpTimer = setTimeout(() => {
         lpTimer = null; menuShown = true;
@@ -557,7 +658,7 @@ function setupDrag(bar, sec, task, lh, rh) {
       if (mode === 'move') {
         const raw = Math.max(0, st.x + dx);
         const sl = snapTo(raw), sr = snapTo(raw + task.w);
-        if (sl !== null)      { task.x = sl;            bar.classList.add('snapping'); }
+        if (sl !== null)      { task.x = sl;           bar.classList.add('snapping'); }
         else if (sr !== null) { task.x = sr - task.w;  bar.classList.add('snapping'); }
         else                  { task.x = raw;          bar.classList.remove('snapping'); }
         bar.style.left = `${task.x}px`;
@@ -567,6 +668,7 @@ function setupDrag(bar, sec, task, lh, rh) {
         if (sr !== null) { w = Math.max(50, sr - st.x); bar.classList.add('snapping'); }
         else             { bar.classList.remove('snapping'); }
         task.w = w; bar.style.width = `${w}px`;
+        updateTaskShape(bar, task); // shape adjusts to new width
       } else { // 'l'
         let nw = Math.max(50, st.w - dx);
         let nx = Math.max(0, st.x + st.w - nw);
@@ -575,22 +677,40 @@ function setupDrag(bar, sec, task, lh, rh) {
         else             { bar.classList.remove('snapping'); }
         task.x = nx; task.w = nw;
         bar.style.left = `${nx}px`; bar.style.width = `${nw}px`;
+        updateTaskShape(bar, task);
       }
-      updateTaskMarkers(bar, task); // live marker update while dragging
-      layoutSection(sec, task.id);  // re-flow other tasks in real-time (skip dragged)
+      updateTaskMarkers(bar, task);
+      layoutSection(sec, task.id);
     };
 
     const onUp = ev => {
       if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
       try { bar.releasePointerCapture(ev.pointerId); } catch (_) {}
       bar.removeEventListener('pointermove', onMove);
-      bar.removeEventListener('pointerup', onUp);
+      bar.removeEventListener('pointerup',   onUp);
       bar.removeEventListener('pointercancel', onUp);
       bar.classList.remove('dragging', 'snapping');
-      layoutSection(sec);           // final layout including released task
+      layoutSection(sec);
+      updateTaskShape(bar, task);
+      updateFadeHandles(bar, sec, task); // reposition after resize
       updateTaskMarkers(bar, task);
-      // A press without movement (and no menu) is a tap → edit the text
-      if (!started && !menuShown && input) input.focus();
+
+      if (!started && !menuShown) {
+        // Tap on lh/rh → fade menu (if no fade yet)
+        if (pressedLH && task.fadeIn === 0) {
+          showCtx(ev.clientX, ev.clientY, [{
+            label: 'フェードイン追加',
+            fn: () => { task.fadeIn = Math.round(task.w * 0.2); updateTaskShape(bar, task); updateFadeHandles(bar, sec, task); }
+          }]);
+        } else if (pressedRH && task.fadeOut === 0) {
+          showCtx(ev.clientX, ev.clientY, [{
+            label: 'フェードアウト追加',
+            fn: () => { task.fadeOut = Math.round(task.w * 0.2); updateTaskShape(bar, task); updateFadeHandles(bar, sec, task); }
+          }]);
+        } else if (!pressedLH && !pressedRH && input) {
+          input.focus();
+        }
+      }
     };
 
     bar.addEventListener('pointermove', onMove);
@@ -650,7 +770,7 @@ function addTask(secId, clickX) {
     const last = sec.tasks[sec.tasks.length - 1];
     x = last ? last.x + last.w + 12 : 20;
   }
-  const task = { id: uid(), x, w: TASK_W_DEF, text: '' };
+  const task = { id: uid(), x, w: TASK_W_DEF, text: '', fadeIn: 0, fadeOut: 0 };
   sec.tasks.push(task);
   const sc = document.getElementById(`sc-${secId}`);
   if (!sc) return;
