@@ -205,7 +205,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 21;
+const BUILD = 22;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -225,6 +225,33 @@ const scrollWrap = document.getElementById('scroll-wrap');
 const tlContent  = document.getElementById('tl-content');
 const addSecRow  = document.getElementById('add-sec-row');
 const ctx        = document.getElementById('ctx');
+
+// ── Persistence (localStorage) ────────────────────
+const STORAGE_KEY = 'myplotline_v1';
+
+function saveData() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ _id, events, sections }));
+  } catch (_) {}
+}
+
+let _saveTimer = null;
+function scheduleSave() { // debounced save for text inputs
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveData, 500);
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    _id = data._id ?? 1;
+    events.push(...(data.events ?? []));
+    sections.push(...(data.sections ?? []));
+    return true;
+  } catch (_) { return false; }
+}
 
 // ── Context menu ──────────────────────────────────
 let ctxOpenedAt = 0;
@@ -509,6 +536,7 @@ function renderEvents() {
         dot.removeEventListener('pointercancel', onUp);
         dot.classList.remove('snapping');
         updateAllTaskMarkers();
+        if (moved) saveData();
         if (!moved && li) li.focus(); // tap → focus the label input
       };
 
@@ -527,7 +555,7 @@ function renderEvents() {
     li.type = 'text'; li.value = ev.text; li.placeholder = 'イベント名';
     li.setAttribute('data-ev', ev.id);
     li.addEventListener('mousedown', e => e.stopPropagation());
-    li.addEventListener('input', e => { ev.text = e.target.value; });
+    li.addEventListener('input', e => { ev.text = e.target.value; scheduleSave(); });
     lw.appendChild(li);
     tlContent.appendChild(lw);
 
@@ -565,7 +593,7 @@ function renderSection(sec) {
   const ni = document.createElement('input');
   ni.type = 'text'; ni.className = 'sec-name-input';
   ni.value = sec.name; ni.placeholder = 'セクション名';
-  ni.addEventListener('input', e => { sec.name = e.target.value; });
+  ni.addEventListener('input', e => { sec.name = e.target.value; scheduleSave(); });
   lbl.appendChild(ni);
   row.appendChild(lbl);
 
@@ -716,6 +744,7 @@ function setupFadeHandleDrag(handle, bar, sec, task, type) {
       }
       updateTaskMarkers(bar, task);
       updateTaskEdgeLines();
+      saveData();
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup',   onUp);
@@ -752,7 +781,7 @@ function appendTask(container, sec, task) {
   const lh = document.createElement('div'); lh.className = 't-handle tl'; lh.innerHTML = '⋮';
   const ti = document.createElement('input');
   ti.type = 'text'; ti.className = 'task-text'; ti.value = task.text; ti.placeholder = 'タスク名';
-  ti.addEventListener('input', e => { task.text = e.target.value; });
+  ti.addEventListener('input', e => { task.text = e.target.value; scheduleSave(); });
   const rh = document.createElement('div'); rh.className = 't-handle tr'; rh.innerHTML = '⋮';
 
   bar.appendChild(lh); bar.appendChild(ti); bar.appendChild(rh);
@@ -855,6 +884,7 @@ function setupDrag(bar, sec, task, lh, rh) {
       updateFadeHandles(bar, sec, task); // reposition after resize
       updateTaskMarkers(bar, task);
       updateTaskEdgeLines();
+      if (started) saveData(); // persist position/size changes
 
       if (!started && !menuShown) {
         // Tap on lh/rh → fade menu (if no fade yet)
@@ -884,6 +914,7 @@ function setupDrag(bar, sec, task, lh, rh) {
 function addEvent(x) {
   const ev = { id: uid(), x, text: '' };
   events.push(ev);
+  saveData();
   renderEvents();
   // Add drop lines to all sections
   for (const sec of sections) {
@@ -901,6 +932,7 @@ function deleteEvent(id) {
   const i = events.findIndex(e => e.id === id);
   if (i < 0) return;
   events.splice(i, 1);
+  saveData();
   renderEvents();
   for (const sec of sections) {
     const sc = document.getElementById(`sc-${sec.id}`);
@@ -912,6 +944,7 @@ function deleteEvent(id) {
 function addSection() {
   const sec = { id: uid(), name: '', tasks: [] };
   sections.push(sec);
+  saveData();
   const ni = renderSection(sec);
   requestAnimationFrame(() => ni.focus());
 }
@@ -933,6 +966,7 @@ function addTask(secId, clickX) {
   }
   const task = { id: uid(), x, w: TASK_W_DEF, text: '', fadeIn: 0, fadeOut: 0 };
   sec.tasks.push(task);
+  saveData();
   const sc = document.getElementById(`sc-${secId}`);
   if (!sc) return;
   const bar = appendTask(sc, sec, task);
@@ -949,6 +983,7 @@ function deleteTask(secId, taskId) {
   if (!sec) return;
   const i = sec.tasks.findIndex(t => t.id === taskId);
   if (i >= 0) sec.tasks.splice(i, 1);
+  saveData();
   const el = document.getElementById(`task-${taskId}`);
   if (el) el.remove();
   layoutSection(sec);
@@ -963,7 +998,14 @@ tlContent.addEventListener('click', e => {
 
 // ── Init ──────────────────────────────────────────
 document.getElementById('btn-add-sec').addEventListener('click', addSection);
-addSection(); // start with one section
+if (loadData()) {
+  // Restore saved state
+  renderEvents();
+  for (const sec of sections) { renderSection(sec); layoutSection(sec); }
+  updateAllTaskMarkers();
+} else {
+  addSection(); // fresh start with one empty section
+}
 </script>
 </body>
 </html>
