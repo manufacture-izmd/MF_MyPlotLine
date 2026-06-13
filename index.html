@@ -103,6 +103,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .task-bar.dragging { cursor: grabbing; opacity: .88; z-index: 50; }
 .task-bar.snapping { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
 
+/* ── Trapezoid SVG shape (replaces CSS border when fade is active) ── */
+.task-shape-svg  { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.task-shape-poly { fill: var(--task-bg); stroke: var(--task-bd); stroke-width: 1.5px; }
+.task-bar.snapping .task-shape-poly { stroke: var(--accent); }
+
 /* ── Fade handles ── */
 .fade-handle {
   position: absolute; top: 0; width: 12px; height: 12px; border-radius: 50%;
@@ -187,7 +192,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <script>
 'use strict';
 
-const BUILD = 11;
+const BUILD = 12;
 document.getElementById('build').textContent = `build ${BUILD}`;
 
 const SNAP_DIST   = 20;
@@ -506,15 +511,36 @@ const FADE_MIN = 10; // minimum fade length (px)
 function updateTaskShape(bar, task) {
   const fi = Math.max(0, Math.min(task.fadeIn,  task.w - Math.max(0, task.fadeOut)));
   const fo = Math.max(0, Math.min(task.fadeOut, task.w - fi));
+
+  // Remove any previous SVG shape
+  bar.querySelector('.task-shape-svg')?.remove();
+
   if (fi === 0 && fo === 0) {
-    bar.style.clipPath    = '';
+    // Plain rectangle: restore CSS border/background
+    bar.style.clipPath     = '';
     bar.style.borderRadius = '6px';
+    bar.style.background   = '';
+    bar.style.border       = '';
   } else {
-    // Trapezoid: top-left at (fi,0), top-right at (w-fo,0), bottom-right at (w,h), bottom-left at (0,h)
-    const fiP = (fi / task.w * 100).toFixed(2);
-    const foP = (fo / task.w * 100).toFixed(2);
-    bar.style.clipPath    = `polygon(${fiP}% 0%, ${100 - foP}% 0%, 100% 100%, 0% 100%)`;
+    // Trapezoid: draw with SVG so the diagonal edges get a proper stroke
+    const w = task.w, h = TASK_H;
+    const NS  = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.classList.add('task-shape-svg');
+    svg.setAttribute('width', w);
+    svg.setAttribute('height', h);
+
+    const poly = document.createElementNS(NS, 'polygon');
+    poly.classList.add('task-shape-poly');
+    poly.setAttribute('points', `${fi},0 ${w - fo},0 ${w},${h} 0,${h}`);
+    svg.appendChild(poly);
+    bar.insertBefore(svg, bar.firstChild);
+
+    // Let SVG handle visual; hide the CSS border/background
+    bar.style.clipPath     = '';
     bar.style.borderRadius = '0';
+    bar.style.background   = 'transparent';
+    bar.style.border       = 'none';
   }
 }
 
